@@ -2,6 +2,7 @@ const PARTICLE_COUNT = 72000;
 const WORKGROUP_SIZE = 64;
 const FLOATS_PER_PARTICLE = 12;
 const UNIFORM_FLOATS = 14;
+const SIGNATURE_UNIFORM_FLOATS = 4;
 const BLOOM_UNIFORM_FLOATS = 8;
 const BLOOM_LEVEL_COUNT = 5;
 const BLOOM_PASS_COUNT = 1 + (BLOOM_LEVEL_COUNT - 1) + BLOOM_LEVEL_COUNT;
@@ -25,6 +26,20 @@ const FLOW_HDR_TUNING = {
 } as const;
 
 export type FieldMode = "flow" | "mandala" | "topo" | "arch" | "waves";
+export type FlowSignatureMode = "attract" | "reveal" | "negative";
+
+export interface FlowSignatureConfig {
+  signatureText: string;
+  signatureEnabled: boolean;
+  signatureStrength: number;
+  signatureGlow: number;
+  signatureScale: number;
+  signatureOffset: readonly [number, number];
+  signatureMode: FlowSignatureMode;
+}
+
+export type FlowFieldRendererConfig = FlowSignatureConfig;
+export type FlowFieldRendererOptions = Partial<FlowFieldRendererConfig>;
 
 const MODE_INDEX: Record<FieldMode, number> = {
   flow: 0,
@@ -32,6 +47,22 @@ const MODE_INDEX: Record<FieldMode, number> = {
   topo: 2,
   arch: 3,
   waves: 4,
+};
+
+const SIGNATURE_MODE_INDEX: Record<FlowSignatureMode, number> = {
+  attract: 0,
+  reveal: 1,
+  negative: 2,
+};
+
+const FLOW_SIGNATURE_DEFAULTS: FlowSignatureConfig = {
+  signatureText: "maikel.site",
+  signatureEnabled: true,
+  signatureStrength: 0.48,
+  signatureGlow: 0.5,
+  signatureScale: 0.058,
+  signatureOffset: [0.24, -0.42],
+  signatureMode: "reveal",
 };
 
 const computeShader = /* wgsl */ `
@@ -67,9 +98,18 @@ struct Sim {
   padding: f32,
 }
 
+struct Signature {
+  enabled: f32,
+  strength: f32,
+  glow: f32,
+  mode: f32,
+}
+
 @group(0) @binding(0) var<storage, read> sourceParticles: array<Particle>;
 @group(0) @binding(1) var<storage, read_write> targetParticles: array<Particle>;
 @group(0) @binding(2) var<uniform> sim: Sim;
+@group(1) @binding(0) var signatureTexture: texture_2d<f32>;
+@group(1) @binding(1) var<uniform> signature: Signature;
 
 // === Noise primitives ===
 fn hash11(value: f32) -> f32 {
@@ -228,6 +268,57 @@ fn fieldMetricsAt(point: vec2f, time: f32) -> vec4f {
   return vec4f(speed, curl, div, energy);
 }
 
+fn signatureUv(point: vec2f) -> vec2f {
+  return vec2f(point.x * 0.5 + 0.5, 0.5 - point.y * 0.5);
+}
+
+fn signatureInBounds(uv: vec2f) -> bool {
+  return all(uv >= vec2f(0.0)) && all(uv <= vec2f(1.0));
+}
+
+fn signatureTexel(uv: vec2f) -> f32 {
+  if (!signatureInBounds(uv)) {
+    return 0.0;
+  }
+
+  let dimensions = vec2i(textureDimensions(signatureTexture));
+  let maxTexel = max(dimensions - vec2i(1), vec2i(0));
+  let coord = clamp(vec2i(floor(uv * vec2f(dimensions))), vec2i(0), maxTexel);
+  return textureLoad(signatureTexture, coord, 0).a;
+}
+
+fn signatureAttractField(point: vec2f) -> vec2f {
+  if (signature.enabled < 0.5 || abs(signature.mode) > 0.25) {
+    return vec2f(0.0);
+  }
+
+  let uv = signatureUv(point);
+  if (!signatureInBounds(uv)) {
+    return vec2f(0.0);
+  }
+
+  let dimensions = max(vec2f(textureDimensions(signatureTexture)), vec2f(1.0));
+  let texel = 1.0 / dimensions;
+  let center = signatureTexel(uv);
+  let left = signatureTexel(uv - vec2f(texel.x, 0.0));
+  let right = signatureTexel(uv + vec2f(texel.x, 0.0));
+  let up = signatureTexel(uv - vec2f(0.0, texel.y));
+  let down = signatureTexel(uv + vec2f(0.0, texel.y));
+  let gradient = vec2f(right - left, up - down);
+  let edge = smoothstep(0.01, 0.28, length(gradient));
+  let stroke = smoothstep(0.02, 0.65, center);
+  let influence = max(edge, stroke * 0.42);
+
+  if (influence < 0.001) {
+    return vec2f(0.0);
+  }
+
+  let toward = normalize(gradient + vec2f(0.00007, 0.00011));
+  let along = vec2f(-toward.y, toward.x);
+  let bias = toward * (0.012 + stroke * 0.018) + along * edge * 0.014;
+  return bias * influence * signature.strength;
+}
+
 fn mouseField(point: vec2f) -> vec2f {
   if (sim.pointerStrength < 0.001) {
     return vec2f(0.0);
@@ -286,7 +377,7 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u) {
 
   let deltaTime = min(sim.deltaTime, 0.033);
   let position = particle.position;
-  let fieldVelocity = fieldAt(position, sim.time) + mouseField(position);
+  let fieldVelocity = fieldAt(position, sim.time) + mouseField(position) + signatureAttractField(position);
   let response = 0.05 + particle.depth * 0.055;
   particle.velocity = mix(particle.velocity, fieldVelocity, response);
   particle.position = particle.position + particle.velocity * deltaTime * sim.motion * (0.5 + particle.depth * 0.5);
@@ -337,6 +428,13 @@ struct Render {
   padding: vec2f,
 }
 
+struct Signature {
+  enabled: f32,
+  strength: f32,
+  glow: f32,
+  mode: f32,
+}
+
 struct VertexOut {
   @builtin(position) position: vec4f,
   @location(0) local: vec2f,
@@ -353,9 +451,38 @@ struct FragmentOut {
 
 @group(0) @binding(0) var<storage, read> particles: array<Particle>;
 @group(0) @binding(1) var<uniform> render: Render;
+@group(1) @binding(0) var signatureTexture: texture_2d<f32>;
+@group(1) @binding(1) var<uniform> signature: Signature;
 
 fn hash11(value: f32) -> f32 {
   return fract(sin(value * 127.1) * 43758.5453123);
+}
+
+fn signatureModeWeight(modeIndex: f32) -> f32 {
+  return signature.enabled * (1.0 - step(0.25, abs(signature.mode - modeIndex)));
+}
+
+fn signatureUv(position: vec2f) -> vec2f {
+  return vec2f(position.x * 0.5 + 0.5, 0.5 - position.y * 0.5);
+}
+
+fn signatureInBounds(uv: vec2f) -> bool {
+  return all(uv >= vec2f(0.0)) && all(uv <= vec2f(1.0));
+}
+
+fn signatureTexel(uv: vec2f) -> f32 {
+  if (signature.enabled < 0.5 || !signatureInBounds(uv)) {
+    return 0.0;
+  }
+
+  let dimensions = vec2i(textureDimensions(signatureTexture));
+  let maxTexel = max(dimensions - vec2i(1), vec2i(0));
+  let coord = clamp(vec2i(floor(uv * vec2f(dimensions))), vec2i(0), maxTexel);
+  return textureLoad(signatureTexture, coord, 0).a;
+}
+
+fn signatureMaskAt(position: vec2f) -> f32 {
+  return smoothstep(0.02, 0.72, signatureTexel(signatureUv(position)));
 }
 
 fn lifeFade(particle: Particle) -> f32 {
@@ -460,6 +587,11 @@ fn lineVertex(
   let glintShimmer = glintSeed * smoothstep(0.0, 1.0, sin(render.time * 4.2 + particle.seed * 2.7 + particle.position.x * 4.1) * 0.5 + 0.5) * glintSlow;
   let edgeBand = gravityWellEdge(particle.position, render.time);
   let heroBody = heroEnergyBody(particle.position, render.time);
+  let signatureMask = signatureMaskAt(particle.position);
+  let signatureReveal = signatureModeWeight(1.0) * signatureMask * signature.strength;
+  let signatureClear = signatureModeWeight(2.0) * signatureMask * signature.strength;
+  let signatureThread = signatureReveal * (0.52 + max(speedHot, curlHot) * 0.48);
+  let signatureDim = 1.0 - signatureClear * 0.48;
   let edgeFilamentSeed = step(0.46, hash11(particle.seed * 31.17));
   let edgeFilament = edgeBand * edgeFilamentSeed * max(curlHot, speedHot * 0.85);
   let edgeHotspot = hotspotSeed * edgeBand * max(curlHot, speedHot * 0.85);
@@ -467,18 +599,18 @@ fn lineVertex(
   let headShimmer = 0.82 + 0.18 * smoothstep(0.0, 1.0, sin(render.time * 0.7 + particle.seed * 0.21) * 0.5 + 0.5);
   let baseColor = fieldColor(particle);
   let emissiveTint = mix(baseColor * 1.12, vec3f(0.86, 1.0, 0.96), edgeHotspot * 0.62 + brightFilament * 0.18);
-  let bodyGain = NORMAL_THREAD_GAIN + speedHot * 0.26 + heroBody * 0.34 + brightFilament * BRIGHT_GLOW_GAIN * 0.24;
-  let emissiveGain = brightFilament * PARTICLE_EMISSIVE_GAIN + glintShimmer * 5.4 + edgeHotspot * HOTSPOT_GAIN;
+  let bodyGain = NORMAL_THREAD_GAIN + speedHot * 0.26 + heroBody * 0.34 + brightFilament * BRIGHT_GLOW_GAIN * 0.24 + signatureThread * 0.1;
+  let emissiveGain = brightFilament * PARTICLE_EMISSIVE_GAIN + glintShimmer * 5.4 + edgeHotspot * HOTSPOT_GAIN + signatureThread * signature.glow * 1.2;
 
   var out: VertexOut;
   out.position = vec4f(position, 0.0, 1.0);
   out.local = corner;
   out.bodyColor = baseColor * bodyGain;
   out.emissiveColor = emissiveTint * emissiveGain;
-  let bodyAlpha = 0.05 + speed * 0.44 + curlHot * 0.13 + energyHot * 0.1 + heroBody * 0.065 + brightFilament * 0.064 + pointerWake * 0.11;
-  let emissiveAlpha = brightFilament * 0.125 + glintShimmer * 0.17 + edgeHotspot * 0.34 + pointerWake * 0.026;
-  out.bodyAlpha = render.opacity * mask * basin * lifeFade(particle) * headShimmer * bodyAlpha;
-  out.emissiveAlpha = render.opacity * mask * basin * lifeFade(particle) * emissiveAlpha;
+  let bodyAlpha = 0.05 + speed * 0.44 + curlHot * 0.13 + energyHot * 0.1 + heroBody * 0.065 + brightFilament * 0.064 + pointerWake * 0.11 + signatureThread * 0.018;
+  let emissiveAlpha = brightFilament * 0.125 + glintShimmer * 0.17 + edgeHotspot * 0.34 + pointerWake * 0.026 + signatureThread * signature.glow * 0.045;
+  out.bodyAlpha = render.opacity * mask * basin * lifeFade(particle) * headShimmer * bodyAlpha * signatureDim;
+  out.emissiveAlpha = render.opacity * mask * basin * lifeFade(particle) * emissiveAlpha * (1.0 - signatureClear * 0.72);
   return out;
 }
 
@@ -529,6 +661,11 @@ fn spriteVertex(
   let speedHot = smoothstep(0.016, 0.13, particle.mSpeed);
   let edgeBand = gravityWellEdge(particle.position, render.time);
   let heroBody = heroEnergyBody(particle.position, render.time);
+  let signatureMask = signatureMaskAt(particle.position);
+  let signatureReveal = signatureModeWeight(1.0) * signatureMask * signature.strength;
+  let signatureClear = signatureModeWeight(2.0) * signatureMask * signature.strength;
+  let signatureThread = signatureReveal * (0.52 + max(speedHot, curlHot) * 0.48);
+  let signatureDim = 1.0 - signatureClear * 0.52;
   let edgeSpark = edgeBand * step(0.978, hash11(particle.seed * 53.97)) * max(curlHot, speedHot * 0.85);
   let edgeHotspot = hotspotSeed * edgeBand * max(curlHot, speedHot * 0.85);
   let radiusPixels = (0.52 + marker * (1.3 + particle.mSpeed * 1.7 + curlHot * 1.24) + node * 0.85 + glint * 2.7 + edgeSpark * 2.3 + edgeHotspot * 3.15 + heroBody * 0.48 + pointerWake * 2.6) * shimmerPulse;
@@ -541,11 +678,11 @@ fn spriteVertex(
   var out: VertexOut;
   out.position = vec4f(position, 0.0, 1.0);
   out.local = corner;
-  out.bodyColor = baseColor * (NORMAL_THREAD_GAIN * 0.9 + marker * 0.3 + directSpark * 0.38 + heroBody * 0.16);
+  out.bodyColor = baseColor * (NORMAL_THREAD_GAIN * 0.9 + marker * 0.3 + directSpark * 0.38 + heroBody * 0.16 + signatureThread * 0.08);
   out.emissiveColor = mix(baseColor * 1.18, vec3f(0.9, 1.0, 0.98), edgeHotspot * 0.78 + directSpark * 0.24)
-    * (directSpark * PARTICLE_EMISSIVE_GAIN + edgeHotspot * HOTSPOT_GAIN);
-  out.bodyAlpha = render.opacity * mask * basin * lifeFade(particle) * (marker * (0.09 + particle.mSpeed * 0.25 + curlHot * 0.072) + heroBody * 0.024 + nodeTwinkle * 0.068 + pointerWake * 0.11);
-  out.emissiveAlpha = render.opacity * mask * basin * lifeFade(particle) * (glintShimmer * 0.34 + nodeTwinkle * 0.14 + edgeHotspot * 0.58 + pointerWake * 0.035);
+    * (directSpark * PARTICLE_EMISSIVE_GAIN + edgeHotspot * HOTSPOT_GAIN + signatureThread * signature.glow * 0.8);
+  out.bodyAlpha = render.opacity * mask * basin * lifeFade(particle) * (marker * (0.09 + particle.mSpeed * 0.25 + curlHot * 0.072) + heroBody * 0.024 + nodeTwinkle * 0.068 + pointerWake * 0.11 + signatureThread * 0.012) * signatureDim;
+  out.emissiveAlpha = render.opacity * mask * basin * lifeFade(particle) * (glintShimmer * 0.34 + nodeTwinkle * 0.14 + edgeHotspot * 0.58 + pointerWake * 0.035 + signatureThread * signature.glow * 0.032) * (1.0 - signatureClear * 0.78);
   return out;
 }
 
@@ -743,6 +880,13 @@ struct Render {
   padding: vec2f,
 }
 
+struct Signature {
+  enabled: f32,
+  strength: f32,
+  glow: f32,
+  mode: f32,
+}
+
 struct VertexOut {
   @builtin(position) position: vec4f,
   @location(0) uv: vec2f,
@@ -753,6 +897,8 @@ struct VertexOut {
 @group(0) @binding(2) var emissiveTexture: texture_2d<f32>;
 @group(0) @binding(3) var bloomTexture: texture_2d<f32>;
 @group(0) @binding(4) var<uniform> render: Render;
+@group(1) @binding(0) var signatureTexture: texture_2d<f32>;
+@group(1) @binding(1) var<uniform> signature: Signature;
 
 @vertex
 fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOut {
@@ -776,6 +922,29 @@ fn hash21(point: vec2f) -> f32 {
 fn hash22(point: vec2f) -> vec2f {
   let q = vec2f(dot(point, vec2f(127.1, 311.7)), dot(point, vec2f(269.5, 183.3)));
   return -1.0 + 2.0 * fract(sin(q) * 43758.5453);
+}
+
+fn signatureModeWeight(modeIndex: f32) -> f32 {
+  return signature.enabled * (1.0 - step(0.25, abs(signature.mode - modeIndex)));
+}
+
+fn signatureInBounds(uv: vec2f) -> bool {
+  return all(uv >= vec2f(0.0)) && all(uv <= vec2f(1.0));
+}
+
+fn signatureTexel(uv: vec2f) -> f32 {
+  if (signature.enabled < 0.5 || !signatureInBounds(uv)) {
+    return 0.0;
+  }
+
+  let dimensions = vec2i(textureDimensions(signatureTexture));
+  let maxTexel = max(dimensions - vec2i(1), vec2i(0));
+  let coord = clamp(vec2i(floor(uv * vec2f(dimensions))), vec2i(0), maxTexel);
+  return textureLoad(signatureTexture, coord, 0).a;
+}
+
+fn signatureMaskAt(uv: vec2f) -> f32 {
+  return smoothstep(0.02, 0.72, signatureTexel(uv));
 }
 
 fn snoise2(point: vec2f) -> f32 {
@@ -887,13 +1056,20 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
   let bloomTint = mix(vec3f(0.82, 1.0, 0.98), vec3f(0.74, 1.0, 0.92), p3);
   let sceneLight = scene * 1.18 + emissive * 0.98 + bloomLit * bloomTint * bloomPulse;
   let pointerColor = (vec3f(0.24, 0.72, 0.88) * pointerHalo + vec3f(0.7, 0.98, 0.92) * pointerCore) * render.pointerStrength * 0.12;
+  let signatureUv = vec2f(input.uv.x, 1.0 - input.uv.y);
+  let signatureReveal = signatureModeWeight(1.0) * signatureMaskAt(signatureUv) * signature.strength;
+  let signatureGrain = r1 * 0.58 + r2 * 0.34 + smoothstep(0.02, 0.42, sceneMag) * 0.18;
+  let signatureTint = mix(vec3f(0.08, 0.42, 0.52), vec3f(0.58, 1.0, 0.9), signature.glow * 0.42);
+  let signatureLight = signatureTint * signatureReveal * (0.34 + signatureGrain * 0.66) * (0.18 + signature.glow * 0.3);
   let fieldVeilWeight = (0.26 + 0.74 * smoothstep(0.16, 0.94, input.uv.x)) * smoothstep(0.04, 0.82, input.uv.y);
   let fieldVeil = (vec3f(0.08, 0.44, 0.56) * r1 * 0.046 + vec3f(0.1, 0.22, 0.62) * r2 * 0.032) * SUBTLE_FIELD_LINE * fieldVeilWeight;
   let heroHalo = vec3f(0.08, 0.42, 0.52) * heroBody * (0.06 + r1 * 0.07);
-  var color = skyColor(input.uv, render.time) + sceneLight + caustic + fieldVeil + heroHalo + pointerColor;
+  var color = skyColor(input.uv, render.time) + sceneLight + caustic + fieldVeil + heroHalo + pointerColor + signatureLight;
 
   let basin = readabilityBasin(input.uv);
   color = mix(color, color * 0.74 + vec3f(0.005, 0.008, 0.012), basin * 0.3);
+  let signatureNegative = signatureModeWeight(2.0) * signatureMaskAt(signatureUv) * signature.strength;
+  color = mix(color, color * (0.76 - signature.glow * 0.06) + vec3f(0.002, 0.004, 0.007), signatureNegative * 0.22);
 
   let toneMapped = toneMapFilmic(color);
   return vec4f(toneMapped, 1.0);
@@ -927,13 +1103,21 @@ interface CanvasOutputConfig {
   toneMapping?: { mode: "extended" };
 }
 
+interface SignatureMaskTexture {
+  texture: GPUTexture;
+  view: GPUTextureView;
+  key: string;
+}
+
 export interface FlowFieldRenderer {
   destroy: () => void;
   setMode: (mode: FieldMode) => void;
+  setSignature: (config: FlowFieldRendererOptions) => void;
 }
 
 export async function startFlowFieldRenderer(
   canvas: HTMLCanvasElement,
+  config: FlowFieldRendererOptions = {},
 ): Promise<FlowFieldRenderer> {
   if (!navigator.gpu) {
     throw new Error(
@@ -996,6 +1180,11 @@ export async function startFlowFieldRenderer(
   const accumBuffer = device.createBuffer({
     label: "flow accumulation uniforms",
     size: UNIFORM_FLOATS * Float32Array.BYTES_PER_ELEMENT,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+  const signatureBuffer = device.createBuffer({
+    label: "flow signature uniforms",
+    size: SIGNATURE_UNIFORM_FLOATS * Float32Array.BYTES_PER_ELEMENT,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
   const bloomBuffers = Array.from({ length: BLOOM_PASS_COUNT }, (_, index) =>
@@ -1109,6 +1298,7 @@ export async function startFlowFieldRenderer(
       topology: "triangle-list",
     },
   });
+  let signatureMask = createEmptySignatureMask(device);
   const computeBindGroups = [
     createComputeBindGroup(
       device,
@@ -1133,6 +1323,34 @@ export async function startFlowFieldRenderer(
     createRenderBindGroup(device, spritePipeline, particleBuffers[0], renderBuffer),
     createRenderBindGroup(device, spritePipeline, particleBuffers[1], renderBuffer),
   ];
+  let computeSignatureBindGroup = createSignatureBindGroup(
+    device,
+    computePipeline.getBindGroupLayout(1),
+    signatureMask.view,
+    signatureBuffer,
+    "flow compute signature bind group",
+  );
+  let lineSignatureBindGroup = createSignatureBindGroup(
+    device,
+    linePipeline.getBindGroupLayout(1),
+    signatureMask.view,
+    signatureBuffer,
+    "flow line signature bind group",
+  );
+  let spriteSignatureBindGroup = createSignatureBindGroup(
+    device,
+    spritePipeline.getBindGroupLayout(1),
+    signatureMask.view,
+    signatureBuffer,
+    "flow sprite signature bind group",
+  );
+  let postSignatureBindGroup = createSignatureBindGroup(
+    device,
+    postPipeline.getBindGroupLayout(1),
+    signatureMask.view,
+    signatureBuffer,
+    "flow post signature bind group",
+  );
   const setupError = await device.popErrorScope();
 
   if (setupError) {
@@ -1154,9 +1372,12 @@ export async function startFlowFieldRenderer(
   const simUniforms = new Float32Array(UNIFORM_FLOATS);
   const renderUniforms = new Float32Array(UNIFORM_FLOATS);
   const accumUniforms = new Float32Array(UNIFORM_FLOATS);
+  const signatureUniforms = new Float32Array(SIGNATURE_UNIFORM_FLOATS);
   const bloomUniforms = new Float32Array(BLOOM_UNIFORM_FLOATS);
   const targetWeights = [1, 0, 0, 0, 0];
   const currentWeights = [1, 0, 0, 0, 0];
+  let signatureConfig = resolveFlowSignatureConfig(config);
+  let fontRevision = 0;
   const abortController = new AbortController();
   let sceneTexture: GPUTexture | null = null;
   let emissiveTexture: GPUTexture | null = null;
@@ -1175,6 +1396,18 @@ export async function startFlowFieldRenderer(
   let animationFrame = 0;
   let active = true;
   let checkedFirstFrame = false;
+
+  writeSignatureUniforms();
+  if ("fonts" in document) {
+    void document.fonts.ready.then(() => {
+      if (!active) {
+        return;
+      }
+
+      fontRevision += 1;
+      scheduleFrame();
+    });
+  }
 
   canvas.addEventListener(
     "pointermove",
@@ -1234,9 +1467,69 @@ export async function startFlowFieldRenderer(
     { signal: abortController.signal },
   );
 
+  function writeSignatureUniforms(): void {
+    signatureUniforms.set([
+      signatureConfig.signatureEnabled && signatureConfig.signatureText.trim().length > 0 ? 1 : 0,
+      signatureConfig.signatureStrength,
+      signatureConfig.signatureGlow,
+      SIGNATURE_MODE_INDEX[signatureConfig.signatureMode] ?? SIGNATURE_MODE_INDEX.reveal,
+    ]);
+    device.queue.writeBuffer(signatureBuffer, 0, signatureUniforms);
+  }
+
+  function rebuildSignatureBindGroups(): void {
+    computeSignatureBindGroup = createSignatureBindGroup(
+      device,
+      computePipeline.getBindGroupLayout(1),
+      signatureMask.view,
+      signatureBuffer,
+      "flow compute signature bind group",
+    );
+    lineSignatureBindGroup = createSignatureBindGroup(
+      device,
+      linePipeline.getBindGroupLayout(1),
+      signatureMask.view,
+      signatureBuffer,
+      "flow line signature bind group",
+    );
+    spriteSignatureBindGroup = createSignatureBindGroup(
+      device,
+      spritePipeline.getBindGroupLayout(1),
+      signatureMask.view,
+      signatureBuffer,
+      "flow sprite signature bind group",
+    );
+    postSignatureBindGroup = createSignatureBindGroup(
+      device,
+      postPipeline.getBindGroupLayout(1),
+      signatureMask.view,
+      signatureBuffer,
+      "flow post signature bind group",
+    );
+  }
+
+  function replaceSignatureMask(nextMask: SignatureMaskTexture): void {
+    const previousMask = signatureMask;
+    signatureMask = nextMask;
+    rebuildSignatureBindGroups();
+    previousMask.texture.destroy();
+  }
+
+  function refreshSignatureMask(): void {
+    const nextKey = createSignatureMaskKey(canvas, signatureConfig, fontRevision);
+    if (signatureMask.key === nextKey) {
+      return;
+    }
+
+    replaceSignatureMask(createSignatureMaskTexture(device, canvas, signatureConfig, nextKey));
+  }
+
   function refreshTargets(): void {
+    const resized = resizeCanvas(canvas);
+    refreshSignatureMask();
+
     if (
-      !resizeCanvas(canvas) &&
+      !resized &&
       sceneTexture &&
       emissiveTexture &&
       historyA &&
@@ -1614,6 +1907,7 @@ export async function startFlowFieldRenderer(
     });
     computePass.setPipeline(computePipeline);
     computePass.setBindGroup(0, computeBindGroups[sourceIndex]);
+    computePass.setBindGroup(1, computeSignatureBindGroup);
     computePass.dispatchWorkgroups(Math.ceil(PARTICLE_COUNT / WORKGROUP_SIZE));
     computePass.end();
 
@@ -1636,9 +1930,11 @@ export async function startFlowFieldRenderer(
     });
     scenePass.setPipeline(linePipeline);
     scenePass.setBindGroup(0, lineBindGroups[targetIndex]);
+    scenePass.setBindGroup(1, lineSignatureBindGroup);
     scenePass.draw(6, PARTICLE_COUNT);
     scenePass.setPipeline(spritePipeline);
     scenePass.setBindGroup(0, spriteBindGroups[targetIndex]);
+    scenePass.setBindGroup(1, spriteSignatureBindGroup);
     scenePass.draw(6, PARTICLE_COUNT);
     scenePass.end();
 
@@ -1714,6 +2010,7 @@ export async function startFlowFieldRenderer(
     });
     postPass.setPipeline(postPipeline);
     postPass.setBindGroup(0, postBindGroup);
+    postPass.setBindGroup(1, postSignatureBindGroup);
     postPass.draw(3);
     postPass.end();
 
@@ -1767,6 +2064,8 @@ export async function startFlowFieldRenderer(
       simBuffer.destroy();
       renderBuffer.destroy();
       accumBuffer.destroy();
+      signatureBuffer.destroy();
+      signatureMask.texture.destroy();
       bloomBuffers.forEach((buffer) => {
         buffer.destroy();
       });
@@ -1776,6 +2075,14 @@ export async function startFlowFieldRenderer(
       for (let i = 0; i < 5; i += 1) {
         targetWeights[i] = i === nextActive ? 1 : 0;
       }
+    },
+    setSignature: (nextConfig: FlowFieldRendererOptions) => {
+      signatureConfig = resolveFlowSignatureConfig({
+        ...signatureConfig,
+        ...nextConfig,
+      });
+      writeSignatureUniforms();
+      scheduleFrame();
     },
   };
 
@@ -1901,6 +2208,23 @@ function createRenderBindGroup(
     layout: pipeline.getBindGroupLayout(0),
     entries: [
       { binding: 0, resource: { buffer: particles } },
+      { binding: 1, resource: { buffer: uniforms } },
+    ],
+  });
+}
+
+function createSignatureBindGroup(
+  device: GPUDevice,
+  layout: GPUBindGroupLayout,
+  textureView: GPUTextureView,
+  uniforms: GPUBuffer,
+  label: string,
+): GPUBindGroup {
+  return device.createBindGroup({
+    label,
+    layout,
+    entries: [
+      { binding: 0, resource: textureView },
       { binding: 1, resource: { buffer: uniforms } },
     ],
   });
@@ -2067,6 +2391,192 @@ function createInitialParticles(count: number): Float32Array {
   }
 
   return particles;
+}
+
+function resolveFlowSignatureConfig(config: FlowFieldRendererOptions): FlowSignatureConfig {
+  const signatureOffset = config.signatureOffset ?? FLOW_SIGNATURE_DEFAULTS.signatureOffset;
+  return {
+    signatureText: sanitizeSignatureText(
+      config.signatureText ?? FLOW_SIGNATURE_DEFAULTS.signatureText,
+    ),
+    signatureEnabled: config.signatureEnabled ?? FLOW_SIGNATURE_DEFAULTS.signatureEnabled,
+    signatureStrength: clampNumber(
+      config.signatureStrength ?? FLOW_SIGNATURE_DEFAULTS.signatureStrength,
+      0,
+      1,
+    ),
+    signatureGlow: clampNumber(config.signatureGlow ?? FLOW_SIGNATURE_DEFAULTS.signatureGlow, 0, 1),
+    signatureScale: clampNumber(
+      config.signatureScale ?? FLOW_SIGNATURE_DEFAULTS.signatureScale,
+      0.035,
+      0.13,
+    ),
+    signatureOffset: [
+      clampNumber(signatureOffset[0], -0.86, 0.86),
+      clampNumber(signatureOffset[1], -0.78, 0.78),
+    ],
+    signatureMode: isFlowSignatureMode(config.signatureMode)
+      ? config.signatureMode
+      : FLOW_SIGNATURE_DEFAULTS.signatureMode,
+  };
+}
+
+function createSignatureMaskKey(
+  canvas: HTMLCanvasElement,
+  config: FlowSignatureConfig,
+  fontRevision: number,
+): string {
+  if (!config.signatureEnabled || config.signatureText.trim().length === 0) {
+    return "signature:disabled";
+  }
+
+  const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  return [
+    "signature",
+    canvas.width,
+    canvas.height,
+    formatSignatureKeyNumber(pixelRatio),
+    config.signatureText,
+    resolveSignatureFontFamily(canvas),
+    fontRevision,
+    formatSignatureKeyNumber(config.signatureScale),
+    formatSignatureKeyNumber(config.signatureOffset[0]),
+    formatSignatureKeyNumber(config.signatureOffset[1]),
+  ].join("|");
+}
+
+function createSignatureMaskTexture(
+  device: GPUDevice,
+  canvas: HTMLCanvasElement,
+  config: FlowSignatureConfig,
+  key: string,
+): SignatureMaskTexture {
+  if (!config.signatureEnabled || config.signatureText.trim().length === 0) {
+    return createEmptySignatureMask(device, key);
+  }
+
+  const width = Math.max(1, canvas.width);
+  const height = Math.max(1, canvas.height);
+  const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  const maskCanvas = document.createElement("canvas");
+  maskCanvas.width = width;
+  maskCanvas.height = height;
+
+  const context = maskCanvas.getContext("2d", { alpha: true });
+  if (!context) {
+    return createEmptySignatureMask(device, key);
+  }
+
+  const fontFamily = resolveSignatureFontFamily(canvas);
+  const fontSize = Math.round(
+    clampNumber(
+      Math.min(width, height) * config.signatureScale,
+      12 * pixelRatio,
+      112 * pixelRatio,
+    ),
+  );
+  const text = config.signatureText.trim();
+
+  context.clearRect(0, 0, width, height);
+  context.direction = "ltr";
+  context.font = `650 ${fontSize}px ${fontFamily}`;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+
+  const metrics = context.measureText(text);
+  const ascent = metrics.actualBoundingBoxAscent || fontSize * 0.72;
+  const descent = metrics.actualBoundingBoxDescent || fontSize * 0.22;
+  const halfTextWidth = metrics.width * 0.5;
+  const halfTextHeight = (ascent + descent) * 0.5;
+  const margin = Math.max(12 * pixelRatio, fontSize * 0.42);
+  const targetX = width * 0.5 + config.signatureOffset[0] * width * 0.5;
+  const targetY = height * 0.5 - config.signatureOffset[1] * height * 0.5;
+  const x = clampPlacement(targetX, margin + halfTextWidth, width - margin - halfTextWidth, width);
+  const y = clampPlacement(
+    targetY,
+    margin + halfTextHeight,
+    height - margin - halfTextHeight,
+    height,
+  );
+
+  context.lineJoin = "round";
+  context.lineWidth = Math.max(1, fontSize * 0.065);
+  context.strokeStyle = "rgba(255, 255, 255, 0.52)";
+  context.fillStyle = "rgba(255, 255, 255, 0.96)";
+  context.strokeText(text, x, y);
+  context.fillText(text, x, y);
+
+  const texture = device.createTexture({
+    label: "flow signature mask texture",
+    size: { width, height },
+    format: "rgba8unorm",
+    usage:
+      GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+  });
+
+  device.queue.copyExternalImageToTexture(
+    { source: maskCanvas },
+    { texture },
+    { width, height },
+  );
+
+  return {
+    texture,
+    view: texture.createView(),
+    key,
+  };
+}
+
+function createEmptySignatureMask(device: GPUDevice, key = "signature:empty"): SignatureMaskTexture {
+  const texture = device.createTexture({
+    label: "flow empty signature mask",
+    size: { width: 1, height: 1 },
+    format: "rgba8unorm",
+    usage:
+      GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+  });
+  device.queue.writeTexture({ texture }, new Uint8Array([0, 0, 0, 0]), {}, { width: 1, height: 1 });
+
+  return {
+    texture,
+    view: texture.createView(),
+    key,
+  };
+}
+
+function resolveSignatureFontFamily(canvas: HTMLCanvasElement): string {
+  const canvasFamily = window.getComputedStyle(canvas).fontFamily.trim();
+  const bodyFamily = window.getComputedStyle(document.body).fontFamily.trim();
+  const rootFamily = window.getComputedStyle(document.documentElement).fontFamily.trim();
+  return canvasFamily || bodyFamily || rootFamily || 'system-ui, "Segoe UI", Roboto, sans-serif';
+}
+
+function sanitizeSignatureText(value: string): string {
+  return value.trim().slice(0, 64);
+}
+
+function isFlowSignatureMode(value: unknown): value is FlowSignatureMode {
+  return value === "attract" || value === "reveal" || value === "negative";
+}
+
+function clampPlacement(target: number, min: number, max: number, size: number): number {
+  if (min > max) {
+    return size * 0.5;
+  }
+
+  return clampNumber(target, min, max);
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+
+  return Math.min(max, Math.max(min, value));
+}
+
+function formatSignatureKeyNumber(value: number): string {
+  return Number.isFinite(value) ? value.toFixed(4) : "0.0000";
 }
 
 function resizeCanvas(canvas: HTMLCanvasElement): boolean {
