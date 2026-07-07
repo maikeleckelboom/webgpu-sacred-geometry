@@ -1,4 +1,4 @@
-import { createMandalaGeometry } from './geometry'
+import { createMandalaGeometry } from "./geometry";
 
 const shader = /* wgsl */ `
 struct Scene {
@@ -53,99 +53,101 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
 
   return vec4f(rgb * scene.contrast, alpha);
 }
-`
+`;
 
 export interface MandalaRenderer {
-  destroy: () => void
+  destroy: () => void;
 }
 
 export async function startMandalaRenderer(canvas: HTMLCanvasElement): Promise<MandalaRenderer> {
   if (!navigator.gpu) {
-    throw new Error('This browser does not expose navigator.gpu. Use a WebGPU-capable Chromium, Edge, or Safari build.')
+    throw new Error(
+      "This browser does not expose navigator.gpu. Use a WebGPU-capable Chromium, Edge, or Safari build.",
+    );
   }
 
   const adapter = await navigator.gpu.requestAdapter({
-    powerPreference: 'high-performance',
-  })
+    powerPreference: "high-performance",
+  });
 
   if (!adapter) {
-    throw new Error('WebGPU is available, but no compatible GPU adapter was returned.')
+    throw new Error("WebGPU is available, but no compatible GPU adapter was returned.");
   }
 
-  const device = await adapter.requestDevice()
-  const context = canvas.getContext('webgpu')
+  const device = await adapter.requestDevice();
+  const context = canvas.getContext("webgpu");
 
   if (!context) {
-    throw new Error('Could not create a WebGPU canvas context.')
+    throw new Error("Could not create a WebGPU canvas context.");
   }
 
-  const gpuContext = context
-  const format = navigator.gpu.getPreferredCanvasFormat()
-  const geometry = createMandalaGeometry()
+  const gpuContext = context;
+  const format = navigator.gpu.getPreferredCanvasFormat();
+  const geometry = createMandalaGeometry();
   const vertexBuffer = device.createBuffer({
-    label: 'mandala vertices',
+    label: "mandala vertices",
     size: geometry.vertices.byteLength,
     usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-  })
-  device.queue.writeBuffer(vertexBuffer, 0, geometry.vertices)
+  });
+  device.queue.writeBuffer(vertexBuffer, 0, geometry.vertices);
 
   const uniformBuffer = device.createBuffer({
-    label: 'scene uniforms',
+    label: "scene uniforms",
     size: 16,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-  })
+  });
 
   const module = device.createShaderModule({
-    label: 'mandala shader',
+    label: "mandala shader",
     code: shader,
-  })
+  });
 
   const pipeline = device.createRenderPipeline({
-    label: 'additive mandala pipeline',
-    layout: 'auto',
+    label: "additive mandala pipeline",
+    layout: "auto",
     vertex: {
       module,
-      entryPoint: 'vertexMain',
+      entryPoint: "vertexMain",
       buffers: [
         {
           arrayStride: 36,
           attributes: [
-            { shaderLocation: 0, offset: 0, format: 'float32x2' },
-            { shaderLocation: 1, offset: 8, format: 'float32x2' },
-            { shaderLocation: 2, offset: 16, format: 'float32x4' },
-            { shaderLocation: 3, offset: 32, format: 'float32' },
+            { shaderLocation: 0, offset: 0, format: "float32x2" },
+            { shaderLocation: 1, offset: 8, format: "float32x2" },
+            { shaderLocation: 2, offset: 16, format: "float32x4" },
+            { shaderLocation: 3, offset: 32, format: "float32" },
           ],
         },
       ],
     },
     fragment: {
       module,
-      entryPoint: 'fragmentMain',
+      entryPoint: "fragmentMain",
       targets: [
         {
           format,
           blend: {
             color: {
-              srcFactor: 'src-alpha',
-              dstFactor: 'one',
-              operation: 'add',
+              srcFactor: "src-alpha",
+              dstFactor: "one",
+              operation: "add",
             },
             alpha: {
-              srcFactor: 'one',
-              dstFactor: 'one-minus-src-alpha',
-              operation: 'add',
+              srcFactor: "one",
+              dstFactor: "one-minus-src-alpha",
+              operation: "add",
             },
           },
         },
       ],
     },
     primitive: {
-      topology: 'triangle-list',
+      topology: "triangle-list",
     },
-  })
+  });
 
   const bindGroup = device.createBindGroup({
-    label: 'scene bind group',
+    label: "scene bind group",
     layout: pipeline.getBindGroupLayout(0),
     entries: [
       {
@@ -155,117 +157,117 @@ export async function startMandalaRenderer(canvas: HTMLCanvasElement): Promise<M
         },
       },
     ],
-  })
+  });
 
   gpuContext.configure({
     device,
     format,
-    alphaMode: 'opaque',
-  })
+    alphaMode: "opaque",
+  });
 
-  const uniforms = new Float32Array(4)
-  const abortController = new AbortController()
-  let animationFrame = 0
-  let active = true
+  const uniforms = new Float32Array(4);
+  const abortController = new AbortController();
+  let animationFrame = 0;
+  let active = true;
 
   document.addEventListener(
-    'visibilitychange',
+    "visibilitychange",
     () => {
       if (!document.hidden) {
-        scheduleFrame()
+        scheduleFrame();
       }
     },
     { signal: abortController.signal },
-  )
+  );
 
   function frame(time: number): void {
-    animationFrame = 0
+    animationFrame = 0;
 
     if (!active || document.hidden) {
-      return
+      return;
     }
 
     if (resizeCanvas(canvas)) {
       gpuContext.configure({
         device,
         format,
-        alphaMode: 'opaque',
-      })
+        alphaMode: "opaque",
+      });
     }
 
-    const width = Math.max(1, canvas.width)
-    const height = Math.max(1, canvas.height)
-    const scaleX = width >= height ? height / width : 1
-    const scaleY = height >= width ? width / height : 1
-    uniforms.set([scaleX, scaleY, time * 0.001, 1.08])
-    device.queue.writeBuffer(uniformBuffer, 0, uniforms)
+    const width = Math.max(1, canvas.width);
+    const height = Math.max(1, canvas.height);
+    const scaleX = width >= height ? height / width : 1;
+    const scaleY = height >= width ? width / height : 1;
+    uniforms.set([scaleX, scaleY, time * 0.001, 1.08]);
+    device.queue.writeBuffer(uniformBuffer, 0, uniforms);
 
     const encoder = device.createCommandEncoder({
-      label: 'mandala frame encoder',
-    })
+      label: "mandala frame encoder",
+    });
     const pass = encoder.beginRenderPass({
-      label: 'mandala render pass',
+      label: "mandala render pass",
       colorAttachments: [
         {
           view: gpuContext.getCurrentTexture().createView(),
           clearValue: { r: 0, g: 0, b: 0, a: 1 },
-          loadOp: 'clear',
-          storeOp: 'store',
+          loadOp: "clear",
+          storeOp: "store",
         },
       ],
-    })
+    });
 
-    pass.setPipeline(pipeline)
-    pass.setBindGroup(0, bindGroup)
-    pass.setVertexBuffer(0, vertexBuffer)
-    pass.draw(geometry.vertexCount)
-    pass.end()
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.setVertexBuffer(0, vertexBuffer);
+    pass.draw(geometry.vertexCount);
+    pass.end();
 
-    device.queue.submit([encoder.finish()])
-    scheduleFrame()
+    device.queue.submit([encoder.finish()]);
+    scheduleFrame();
   }
 
   function scheduleFrame(): void {
     if (!active || document.hidden || animationFrame !== 0) {
-      return
+      return;
     }
 
-    animationFrame = requestAnimationFrame(frame)
+    animationFrame = requestAnimationFrame(frame);
   }
 
   const renderer: MandalaRenderer = {
     destroy: () => {
       if (!active) {
-        return
+        return;
       }
 
-      active = false
-      abortController.abort()
+      active = false;
+      abortController.abort();
 
       if (animationFrame !== 0) {
-        cancelAnimationFrame(animationFrame)
-        animationFrame = 0
+        cancelAnimationFrame(animationFrame);
+        animationFrame = 0;
       }
 
-      vertexBuffer.destroy()
-      uniformBuffer.destroy()
+      vertexBuffer.destroy();
+      uniformBuffer.destroy();
     },
-  }
+  };
 
-  scheduleFrame()
-  return renderer
+  scheduleFrame();
+  return renderer;
 }
 
 function resizeCanvas(canvas: HTMLCanvasElement): boolean {
-  const pixelRatio = Math.min(window.devicePixelRatio || 1, 2)
-  const width = Math.max(1, Math.floor(canvas.clientWidth * pixelRatio))
-  const height = Math.max(1, Math.floor(canvas.clientHeight * pixelRatio))
+  const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  const width = Math.max(1, Math.floor(canvas.clientWidth * pixelRatio));
+  const height = Math.max(1, Math.floor(canvas.clientHeight * pixelRatio));
 
   if (canvas.width === width && canvas.height === height) {
-    return false
+    return false;
   }
 
-  canvas.width = width
-  canvas.height = height
-  return true
+  canvas.width = width;
+  canvas.height = height;
+  return true;
 }

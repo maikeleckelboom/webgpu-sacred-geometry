@@ -1,97 +1,98 @@
-import { setPageBodyClass } from './bodyClasses'
-import { startFlowFieldRenderer, type FieldMode, type FlowFieldRenderer } from './flowRenderer'
-import { mountStudyFrame, type PageHandle } from './studyFrame'
+import { setPageBodyClass } from "./bodyClasses";
+import { startFlowFieldRenderer, type FieldMode, type FlowFieldRenderer } from "./flowRenderer";
+import { mountStudyFrame, type PageHandle } from "./studyFrame";
 
 const ROUTE_TO_MODE: Record<string, FieldMode> = {
-  mandala: 'mandala',
-  'flow-field': 'flow',
-  topography: 'topo',
-  architecture: 'arch',
-  waves: 'waves',
-}
+  mandala: "mandala",
+  "flow-field": "flow",
+  topography: "topo",
+  architecture: "arch",
+  waves: "waves",
+};
 
 export function mountFlowFieldPage(root: HTMLDivElement): PageHandle {
-  setPageBodyClass('flow-page-body')
+  setPageBodyClass("flow-page-body");
 
   const { canvas, status } = mountStudyFrame(root, {
-    route: 'flow-field',
-    pageClassName: 'study-page--flow',
-    canvasClassName: 'flow-canvas',
-    canvasLabel: 'Aurora WebGPU particle flow field',
-    titleId: 'flow-title',
-    kicker: 'WebGPU study 02 / aurora compute flow',
-    title: 'Particle flow field under northern light.',
-    description: 'A luminous field of routed particles, drifting curtains, and reactive wake lines moving through soft attractors.',
+    route: "flow-field",
+    pageClassName: "study-page--flow",
+    canvasClassName: "flow-canvas",
+    canvasLabel: "Aurora WebGPU particle flow field",
+    titleId: "flow-title",
+    kicker: "WebGPU study 02 / aurora compute flow",
+    title: "Particle flow field under northern light.",
+    description:
+      "A luminous field of routed particles, drifting curtains, and reactive wake lines moving through soft attractors.",
     actions: [
-      { href: '/topography', label: 'Open topography', variant: 'primary' },
-      { href: '/architecture', label: 'View architecture', variant: 'secondary' },
+      { href: "/topography", label: "Open topography", variant: "primary" },
+      { href: "/architecture", label: "View architecture", variant: "secondary" },
     ],
-  })
+  });
 
-  let renderer: FlowFieldRenderer | null = null
-  let disposed = false
-  const abortController = new AbortController()
+  let renderer: FlowFieldRenderer | null = null;
+  let disposed = false;
+  const abortController = new AbortController();
 
   const navLinks = Array.from(
-    document.querySelectorAll<HTMLAnchorElement>('.lab-nav__link[data-route]'),
-  )
+    document.querySelectorAll<HTMLAnchorElement>(".lab-nav__link[data-route]"),
+  );
 
   const handlePointerEnter = (event: Event): void => {
-    const link = event.currentTarget
+    const link = event.currentTarget;
     if (!(link instanceof HTMLAnchorElement)) {
-      return
+      return;
     }
-    const route = link.dataset.route
+    const route = link.dataset.route;
     if (!route) {
-      return
+      return;
     }
-    const mode = ROUTE_TO_MODE[route] ?? 'flow'
-    renderer?.setMode(mode)
-  }
+    const mode = ROUTE_TO_MODE[route] ?? "flow";
+    renderer?.setMode(mode);
+  };
 
   const handlePointerLeave = (event: Event): void => {
-    const link = event.currentTarget
+    const link = event.currentTarget;
     if (!(link instanceof HTMLAnchorElement)) {
-      return
+      return;
     }
-    if (link.classList.contains('is-active')) {
-      return
+    if (link.classList.contains("is-active")) {
+      return;
     }
-    renderer?.setMode('flow')
-  }
+    renderer?.setMode("flow");
+  };
 
   navLinks.forEach((link) => {
-    link.addEventListener('pointerenter', handlePointerEnter, { signal: abortController.signal })
-    link.addEventListener('pointerleave', handlePointerLeave, { signal: abortController.signal })
-  })
+    link.addEventListener("pointerenter", handlePointerEnter, { signal: abortController.signal });
+    link.addEventListener("pointerleave", handlePointerLeave, { signal: abortController.signal });
+  });
 
   startFlowFieldRenderer(canvas)
     .then((activeRenderer) => {
       if (disposed) {
-        activeRenderer.destroy()
-        return
+        activeRenderer.destroy();
+        return;
       }
-      renderer = activeRenderer
+      renderer = activeRenderer;
     })
     .catch((error: unknown) => {
       if (disposed) {
-        return
+        return;
       }
-      const message = error instanceof Error ? error.message : 'WebGPU initialization failed.'
-      canvas.hidden = true
-      status.hidden = false
-      status.textContent = message
-    })
+      const message = error instanceof Error ? error.message : "WebGPU initialization failed.";
+      canvas.hidden = true;
+      status.hidden = false;
+      status.textContent = message;
+    });
 
   return {
     destroy: () => {
       if (disposed) {
-        return
+        return;
       }
-      disposed = true
-      abortController.abort()
-      renderer?.destroy()
-      renderer = null
+      disposed = true;
+      abortController.abort();
+      renderer?.destroy();
+      renderer = null;
     },
-  }
+  };
 }

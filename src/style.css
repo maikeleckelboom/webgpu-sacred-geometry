@@ -1,7 +1,11 @@
 :root {
   color-scheme: light;
   background: #f8f8f5;
-  font: 15px/1.4 system-ui, "Segoe UI", Roboto, sans-serif;
+  font:
+    15px/1.4 system-ui,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -91,15 +95,12 @@ body.aurora-page-body .lab-header {
   z-index: 5;
   display: grid;
   align-items: center;
-  width: min(100%, 90rem);
   min-height: 4.7rem;
   margin: 0 auto;
   padding: 0 clamp(1.3rem, 5vw, 3.9rem);
-  border-bottom: 1px solid var(--lab-border);
   background: var(--lab-surface);
   color: var(--lab-text);
   grid-template-columns: minmax(0, 1fr) auto;
-  backdrop-filter: blur(16px);
 }
 
 .lab-brand,
@@ -161,11 +162,34 @@ body.aurora-page-body .lab-header {
   --study-status-bg: rgba(255, 255, 255, 0.92);
   --study-status-border: rgba(12, 16, 20, 0.14);
   --study-scrim:
-    linear-gradient(90deg, rgba(248, 248, 245, 0.998) 0%, rgba(248, 248, 245, 0.99) 42%, rgba(248, 248, 245, 0.72) 54%, rgba(248, 248, 245, 0.18) 72%, transparent 88%),
-    linear-gradient(180deg, rgba(248, 248, 245, 0.3) 0%, rgba(248, 248, 245, 0) 30%, rgba(248, 248, 245, 0.44) 100%);
+    linear-gradient(
+      90deg,
+      rgba(248, 248, 245, 0.998) 0%,
+      rgba(248, 248, 245, 0.99) 42%,
+      rgba(248, 248, 245, 0.72) 54%,
+      rgba(248, 248, 245, 0.18) 72%,
+      transparent 88%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(248, 248, 245, 0.3) 0%,
+      rgba(248, 248, 245, 0) 30%,
+      rgba(248, 248, 245, 0.44) 100%
+    );
   --study-vignette:
-    radial-gradient(circle at 74% 48%, transparent 0%, transparent 35%, rgba(248, 248, 245, 0.22) 72%, rgba(248, 248, 245, 0.62) 100%),
-    linear-gradient(0deg, rgba(248, 248, 245, 0.98) 0%, rgba(248, 248, 245, 0.34) 16%, transparent 40%);
+    radial-gradient(
+      circle at 74% 48%,
+      transparent 0%,
+      transparent 35%,
+      rgba(248, 248, 245, 0.22) 72%,
+      rgba(248, 248, 245, 0.62) 100%
+    ),
+    linear-gradient(
+      0deg,
+      rgba(248, 248, 245, 0.98) 0%,
+      rgba(248, 248, 245, 0.34) 16%,
+      transparent 40%
+    );
 
   position: relative;
   isolation: isolate;
@@ -219,6 +243,7 @@ body.aurora-page-body .lab-header {
   margin: 0 auto;
   padding: clamp(2.8rem, 8vh, 6.2rem) clamp(1.3rem, 5vw, 3.9rem) clamp(3rem, 8vh, 5.8rem);
   pointer-events: none;
+  display: none;
 }
 
 .study-kicker {
@@ -313,9 +338,19 @@ body.aurora-page-body .lab-header {
   --study-status-border: rgba(80, 180, 255, 0.36);
   --study-scrim:
     radial-gradient(circle at 50% 50%, rgba(15, 28, 54, 0.16), transparent 34rem),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.94) 0%, rgba(0, 0, 0, 0.78) 38%, rgba(0, 0, 0, 0.2) 69%, transparent 88%);
-  --study-vignette:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.42) 0%, transparent 24%, rgba(0, 0, 0, 0.58) 100%);
+    linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.94) 0%,
+      rgba(0, 0, 0, 0.78) 38%,
+      rgba(0, 0, 0, 0.2) 69%,
+      transparent 88%
+    );
+  --study-vignette: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.42) 0%,
+    transparent 24%,
+    rgba(0, 0, 0, 0.58) 100%
+  );
 }
 
 .study-page--flow {
@@ -330,7 +365,14 @@ body.aurora-page-body .lab-header {
   --study-status-bg: rgba(2, 5, 8, 0.92);
   --study-status-border: rgba(120, 255, 196, 0.32);
   --study-scrim:
-    linear-gradient(90deg, rgba(2, 3, 5, 0.98) 0%, rgba(2, 3, 5, 0.84) 30%, rgba(2, 3, 5, 0.34) 52%, rgba(2, 3, 5, 0.06) 72%, transparent 88%),
+    linear-gradient(
+      90deg,
+      rgba(2, 3, 5, 0.98) 0%,
+      rgba(2, 3, 5, 0.84) 30%,
+      rgba(2, 3, 5, 0.34) 52%,
+      rgba(2, 3, 5, 0.06) 72%,
+      transparent 88%
+    ),
     linear-gradient(180deg, rgba(2, 3, 5, 0.44) 0%, transparent 30%, rgba(2, 3, 5, 0.28) 100%);
   --study-vignette:
     linear-gradient(90deg, rgba(137, 255, 193, 0.06) 0%, transparent 18%, transparent 100%),
@@ -361,7 +403,14 @@ body.aurora-page-body .lab-header {
   --study-status-bg: rgba(2, 5, 8, 0.92);
   --study-status-border: rgba(120, 255, 196, 0.32);
   --study-scrim:
-    linear-gradient(90deg, rgba(2, 3, 5, 0.98) 0%, rgba(2, 3, 5, 0.84) 30%, rgba(2, 3, 5, 0.34) 52%, rgba(2, 3, 5, 0.06) 72%, transparent 88%),
+    linear-gradient(
+      90deg,
+      rgba(2, 3, 5, 0.98) 0%,
+      rgba(2, 3, 5, 0.84) 30%,
+      rgba(2, 3, 5, 0.34) 52%,
+      rgba(2, 3, 5, 0.06) 72%,
+      transparent 88%
+    ),
     linear-gradient(180deg, rgba(2, 3, 5, 0.44) 0%, transparent 30%, rgba(2, 3, 5, 0.28) 100%);
   --study-vignette:
     linear-gradient(90deg, rgba(137, 255, 193, 0.06) 0%, transparent 18%, transparent 100%),
@@ -384,8 +433,20 @@ body.aurora-page-body .lab-header {
   --study-bg: #f2f2ee;
   --study-scrim:
     radial-gradient(circle at 28% 48%, rgba(255, 255, 255, 0.72), transparent 30rem),
-    linear-gradient(90deg, #f8f8f5 0%, rgba(248, 248, 245, 0.96) 34%, rgba(248, 248, 245, 0.22) 60%, transparent 86%),
-    linear-gradient(180deg, rgba(248, 248, 245, 0.72), transparent 24%, transparent 76%, rgba(248, 248, 245, 0.7));
+    linear-gradient(
+      90deg,
+      #f8f8f5 0%,
+      rgba(248, 248, 245, 0.96) 34%,
+      rgba(248, 248, 245, 0.22) 60%,
+      transparent 86%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(248, 248, 245, 0.72),
+      transparent 24%,
+      transparent 76%,
+      rgba(248, 248, 245, 0.7)
+    );
   --study-vignette:
     linear-gradient(rgba(0, 0, 0, 0.028) 1px, transparent 1px),
     linear-gradient(90deg, rgba(0, 0, 0, 0.022) 1px, transparent 1px);
@@ -400,12 +461,35 @@ body.aurora-page-body .lab-header {
 .study-page--waves {
   --study-bg: #f8f7f2;
   --study-scrim:
-    linear-gradient(90deg, #f8f7f2 0%, rgba(248, 247, 242, 0.98) 18%, rgba(248, 247, 242, 0.58) 32%, rgba(248, 247, 242, 0.12) 48%, transparent 66%),
+    linear-gradient(
+      90deg,
+      #f8f7f2 0%,
+      rgba(248, 247, 242, 0.98) 18%,
+      rgba(248, 247, 242, 0.58) 32%,
+      rgba(248, 247, 242, 0.12) 48%,
+      transparent 66%
+    ),
     radial-gradient(circle at 18% 48%, rgba(255, 255, 255, 0.72), transparent 24rem);
   --study-vignette:
-    linear-gradient(180deg, rgba(248, 247, 242, 0.46) 0%, rgba(248, 247, 242, 0.14) 12%, transparent 24%),
-    linear-gradient(0deg, rgba(248, 247, 242, 0.44) 0%, rgba(248, 247, 242, 0.12) 14%, transparent 28%),
-    radial-gradient(ellipse at 70% 43%, transparent 0%, transparent 40%, rgba(248, 247, 242, 0.08) 78%, rgba(248, 247, 242, 0.28) 100%);
+    linear-gradient(
+      180deg,
+      rgba(248, 247, 242, 0.46) 0%,
+      rgba(248, 247, 242, 0.14) 12%,
+      transparent 24%
+    ),
+    linear-gradient(
+      0deg,
+      rgba(248, 247, 242, 0.44) 0%,
+      rgba(248, 247, 242, 0.12) 14%,
+      transparent 28%
+    ),
+    radial-gradient(
+      ellipse at 70% 43%,
+      transparent 0%,
+      transparent 40%,
+      rgba(248, 247, 242, 0.08) 78%,
+      rgba(248, 247, 242, 0.28) 100%
+    );
 }
 
 .flow-canvas {
@@ -495,26 +579,61 @@ body.aurora-page-body .lab-header {
 
   .study-page::before {
     background:
-      linear-gradient(180deg, rgba(248, 248, 245, 0.96) 0%, rgba(248, 248, 245, 0.7) 46%, rgba(248, 248, 245, 0.24) 100%),
-      linear-gradient(90deg, rgba(248, 248, 245, 0.98) 0%, rgba(248, 248, 245, 0.64) 58%, rgba(248, 248, 245, 0.16) 100%);
+      linear-gradient(
+        180deg,
+        rgba(248, 248, 245, 0.96) 0%,
+        rgba(248, 248, 245, 0.7) 46%,
+        rgba(248, 248, 245, 0.24) 100%
+      ),
+      linear-gradient(
+        90deg,
+        rgba(248, 248, 245, 0.98) 0%,
+        rgba(248, 248, 245, 0.64) 58%,
+        rgba(248, 248, 245, 0.16) 100%
+      );
   }
 
   .study-page--mandala::before {
     background:
-      linear-gradient(180deg, rgba(0, 0, 0, 0.92) 0%, rgba(0, 0, 0, 0.72) 48%, rgba(0, 0, 0, 0.26) 100%),
+      linear-gradient(
+        180deg,
+        rgba(0, 0, 0, 0.92) 0%,
+        rgba(0, 0, 0, 0.72) 48%,
+        rgba(0, 0, 0, 0.26) 100%
+      ),
       radial-gradient(circle at 52% 54%, rgba(15, 28, 54, 0.2), transparent 24rem);
   }
 
   .study-page--flow::before {
     background:
-      linear-gradient(180deg, rgba(2, 3, 5, 0.98) 0%, rgba(2, 3, 5, 0.78) 48%, rgba(2, 3, 5, 0.18) 100%),
-      linear-gradient(90deg, rgba(2, 3, 5, 0.92) 0%, rgba(2, 3, 5, 0.54) 64%, rgba(2, 3, 5, 0.08) 100%);
+      linear-gradient(
+        180deg,
+        rgba(2, 3, 5, 0.98) 0%,
+        rgba(2, 3, 5, 0.78) 48%,
+        rgba(2, 3, 5, 0.18) 100%
+      ),
+      linear-gradient(
+        90deg,
+        rgba(2, 3, 5, 0.92) 0%,
+        rgba(2, 3, 5, 0.54) 64%,
+        rgba(2, 3, 5, 0.08) 100%
+      );
   }
 
   .study-page--aurora::before {
     background:
-      linear-gradient(180deg, rgba(2, 3, 5, 0.98) 0%, rgba(2, 3, 5, 0.78) 48%, rgba(2, 3, 5, 0.18) 100%),
-      linear-gradient(90deg, rgba(2, 3, 5, 0.92) 0%, rgba(2, 3, 5, 0.54) 64%, rgba(2, 3, 5, 0.08) 100%);
+      linear-gradient(
+        180deg,
+        rgba(2, 3, 5, 0.98) 0%,
+        rgba(2, 3, 5, 0.78) 48%,
+        rgba(2, 3, 5, 0.18) 100%
+      ),
+      linear-gradient(
+        90deg,
+        rgba(2, 3, 5, 0.92) 0%,
+        rgba(2, 3, 5, 0.54) 64%,
+        rgba(2, 3, 5, 0.08) 100%
+      );
   }
 
   .study-hero {
