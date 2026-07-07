@@ -502,7 +502,8 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
   let scene = textureSample(sceneTexture, accumSampler, input.uv).rgb;
   let decayed = prev * accum.decay;
   let combined = decayed + scene;
-  return vec4f(combined, 1.0);
+  let saturated = combined / (1.0 + combined * 0.2);
+  return vec4f(saturated, 1.0);
 }
 `;
 
@@ -844,7 +845,31 @@ export async function startFlowFieldRenderer(
     { signal: abortController.signal },
   );
   canvas.addEventListener(
+    "pointerenter",
+    (event) => {
+      const rect = canvas.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
+      pointer.y = (1 - (event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1;
+      pointer.active = true;
+    },
+    { signal: abortController.signal },
+  );
+  canvas.addEventListener(
     "pointerleave",
+    () => {
+      pointer.active = false;
+    },
+    { signal: abortController.signal },
+  );
+  canvas.addEventListener(
+    "pointercancel",
+    () => {
+      pointer.active = false;
+    },
+    { signal: abortController.signal },
+  );
+  window.addEventListener(
+    "blur",
     () => {
       pointer.active = false;
     },
@@ -853,10 +878,14 @@ export async function startFlowFieldRenderer(
   document.addEventListener(
     "visibilitychange",
     () => {
-      if (document.hidden && animationFrame !== 0) {
-        cancelAnimationFrame(animationFrame);
-        animationFrame = 0;
+      if (document.hidden) {
+        if (animationFrame !== 0) {
+          cancelAnimationFrame(animationFrame);
+          animationFrame = 0;
+        }
+        pointer.active = false;
       } else {
+        lastTime = 0;
         scheduleFrame();
       }
     },
@@ -901,6 +930,27 @@ export async function startFlowFieldRenderer(
 
     historyViewA = historyA.createView();
     historyViewB = historyB.createView();
+
+    const clearEncoder = device.createCommandEncoder({ label: "flow initial history clear" });
+    const clearPass = clearEncoder.beginRenderPass({
+      label: "flow initial history clear",
+      colorAttachments: [
+        {
+          view: historyViewA,
+          loadOp: "clear",
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },
+          storeOp: "store",
+        },
+        {
+          view: historyViewB,
+          loadOp: "clear",
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },
+          storeOp: "store",
+        },
+      ],
+    });
+    clearPass.end();
+    device.queue.submit([clearEncoder.finish()]);
   }
 
   function frame(time: number): void {
