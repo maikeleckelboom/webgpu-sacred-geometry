@@ -1,51 +1,45 @@
+import { setPageBodyClass } from './bodyClasses'
 import { startFlowFieldRenderer } from './flowRenderer'
+import { createLabHeader } from './navigation'
 
 export function mountFlowFieldPage(root: HTMLDivElement): void {
-  document.body.classList.add('flow-page-body')
+  setPageBodyClass('flow-page-body')
 
   root.innerHTML = `
     <div class="flow-page">
       <canvas class="flow-canvas" aria-label="Abstract WebGPU particle flow field"></canvas>
 
-      <header class="flow-header">
-        <a class="flow-brand" href="/flow-field" aria-label="Maikel Eckelboom home">Maikel Eckelboom</a>
-        <nav class="flow-nav" aria-label="Primary">
-          <a class="flow-nav__link is-active" href="/flow-field">Home</a>
-          <a class="flow-nav__link" href="#career">Loopbaan</a>
-          <a class="flow-nav__link" href="#work">Werk</a>
-          <a class="flow-nav__button" href="mailto:hello@example.com">Contact</a>
-        </nav>
-      </header>
+      ${createLabHeader('flow-field')}
 
       <main class="flow-hero">
-        <p class="flow-kicker">Maikel Eckelboom - full-stack developer</p>
-        <h1>Full-stack developer met een sterke frontendbasis en echte productervaring.</h1>
+        <p class="flow-kicker">WebGPU study 02 / compute flow</p>
+        <h1>Particle routing field with soft system attractors.</h1>
         <p class="flow-subtitle">
-          Mijn beide softwarestages liepen aansluitend door in parttime functies:
-          bij Factif als junior front-end developer en bij gwbo als full-stack developer.
+          A high-key study of many fine traces moving through field basins, lenses,
+          and slow pointer deflection.
         </p>
         <div class="flow-actions" aria-label="Primary actions">
-          <a class="flow-action flow-action--primary" href="#work">Bekijk het werk</a>
-          <a class="flow-action flow-action--secondary" href="#career">Bekijk de loopbaan &#8594;</a>
+          <a class="flow-action flow-action--primary" href="/architecture">Open architecture field</a>
+          <a class="flow-action flow-action--secondary" href="/topography">View topography &#8594;</a>
         </div>
       </main>
 
-      <section class="flow-cards" aria-label="Experience highlights">
-        <article id="career" class="flow-card">
-          <p>Stage &#8594; werk</p>
-          <h2>Beide softwarestages liepen aansluitend door in parttime developerfuncties - bij Factif en bij gwbo.</h2>
-        </article>
-        <article id="work" class="flow-card">
-          <p>Frontendproductie · Factif</p>
-          <h2>Ontwerpen vertaald naar responsive websites, templates en UI-componenten.</h2>
+      <section class="flow-cards" aria-label="Flow field structure">
+        <article class="flow-card">
+          <p>Simulation</p>
+          <h2>Compute buffers update trace position and velocity without CPU-side particle work per frame.</h2>
         </article>
         <article class="flow-card">
-          <p>Full-stack product · gwbo</p>
-          <h2>Klantvraag naar datamodel, API en interface - met autorisatie, deployment en documentatie.</h2>
+          <p>Field</p>
+          <h2>Layered attractors, basins, and lenses create a routed surface instead of loose particle noise.</h2>
         </article>
         <article class="flow-card">
-          <p>Zelfstandig · sinds 2023</p>
-          <h2>Eigen technisch onderzoek: codebases lezen, systemen wijzigen en beslissingen documenteren.</h2>
+          <p>Rendering</p>
+          <h2>Instanced trails and small node sprites keep the visual sharp while preserving soft motion.</h2>
+        </article>
+        <article class="flow-card">
+          <p>Motion</p>
+          <h2>Reduced-motion users receive a calmer field with the same static composition and route context.</h2>
         </article>
       </section>
 

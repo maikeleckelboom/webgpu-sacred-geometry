@@ -1,6 +1,10 @@
 import './style.css'
+import { mountArchitecturePage } from './architecturePage'
+import { setPageBodyClass } from './bodyClasses'
 import { mountFlowFieldPage } from './flowPage'
 import { startMandalaRenderer } from './renderer'
+import { createLabHeader } from './navigation'
+import { mountTopographyPage } from './topographyPage'
 
 const app = document.querySelector<HTMLDivElement>('#app')
 
@@ -12,16 +16,25 @@ const pathname = window.location.pathname.replace(/\/$/, '')
 
 if (pathname === '/flow-field') {
   mountFlowFieldPage(app)
+} else if (pathname === '/topography') {
+  mountTopographyPage(app)
+} else if (pathname === '/architecture') {
+  mountArchitecturePage(app)
 } else {
   mountMandalaPage(app)
 }
 
 function mountMandalaPage(root: HTMLDivElement): void {
-  document.body.classList.remove('flow-page-body')
+  setPageBodyClass('mandala-page-body')
   root.innerHTML = `
-  <canvas id="mandala" aria-label="WebGPU sacred geometry study"></canvas>
-  <div id="status" role="status" hidden></div>
-`
+    <canvas id="mandala" aria-label="WebGPU sacred geometry study"></canvas>
+    ${createLabHeader('mandala')}
+    <section class="mandala-summary" aria-labelledby="mandala-title">
+      <p>WebGPU study 01 / luminous symmetry</p>
+      <h1 id="mandala-title">Mandala geometry study</h1>
+    </section>
+    <div id="status" role="status" hidden></div>
+  `
 
   const canvas = document.querySelector<HTMLCanvasElement>('#mandala')
   const status = document.querySelector<HTMLDivElement>('#status')

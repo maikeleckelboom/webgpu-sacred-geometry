@@ -1,0 +1,27 @@
+export type LabRoute = 'mandala' | 'flow-field' | 'topography' | 'architecture'
+
+const navItems: Array<{ route: LabRoute; href: string; label: string }> = [
+  { route: 'mandala', href: '/', label: 'Mandala' },
+  { route: 'flow-field', href: '/flow-field', label: 'Flow field' },
+  { route: 'topography', href: '/topography', label: 'Topography' },
+  { route: 'architecture', href: '/architecture', label: 'Architecture' },
+]
+
+export function createLabHeader(activeRoute: LabRoute): string {
+  const links = navItems
+    .map(({ route, href, label }) => {
+      const activeClass = route === activeRoute ? ' is-active' : ''
+      const ariaCurrent = route === activeRoute ? ' aria-current="page"' : ''
+      return `<a class="lab-nav__link${activeClass}" href="${href}"${ariaCurrent}>${label}</a>`
+    })
+    .join('')
+
+  return `
+    <header class="lab-header">
+      <a class="lab-brand" href="/" aria-label="WebGPU Sacred Geometry home">WebGPU Sacred Geometry</a>
+      <nav class="lab-nav" aria-label="Study navigation">
+        ${links}
+      </nav>
+    </header>
+  `
+}
