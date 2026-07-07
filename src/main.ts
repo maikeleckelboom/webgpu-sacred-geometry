@@ -1,11 +1,16 @@
 import './style.css'
 import { mountArchitecturePage } from './architecturePage'
-import { setPageBodyClass } from './bodyClasses'
 import { mountFlowFieldPage } from './flowPage'
-import { startMandalaRenderer } from './renderer'
-import { createLabHeader } from './navigation'
+import { mountMandalaPage } from './mandalaPage'
+import { createLabHeader, setLabHeaderActive, type LabRoute } from './navigation'
 import { mountTopographyPage } from './topographyPage'
 import { mountWavesPage } from './wavesPage'
+import type { PageHandle } from './studyFrame'
+
+interface PageRoute {
+  mount: (root: HTMLDivElement) => PageHandle
+  route: LabRoute
+}
 
 const app = document.querySelector<HTMLDivElement>('#app')
 
@@ -13,42 +18,125 @@ if (!app) {
   throw new Error('The app root could not be mounted.')
 }
 
-const pathname = window.location.pathname.replace(/\/$/, '')
+const appRoot = app
 
-if (pathname === '/flow-field') {
-  mountFlowFieldPage(app)
-} else if (pathname === '/topography') {
-  mountTopographyPage(app)
-} else if (pathname === '/architecture') {
-  mountArchitecturePage(app)
-} else if (pathname === '/waves') {
-  mountWavesPage(app)
-} else {
-  mountMandalaPage(app)
+const pageRoutes: Record<string, PageRoute> = {
+  '/': { mount: mountMandalaPage, route: 'mandala' },
+  '/flow-field': { mount: mountFlowFieldPage, route: 'flow-field' },
+  '/topography': { mount: mountTopographyPage, route: 'topography' },
+  '/architecture': { mount: mountArchitecturePage, route: 'architecture' },
+  '/waves': { mount: mountWavesPage, route: 'waves' },
 }
 
-function mountMandalaPage(root: HTMLDivElement): void {
-  setPageBodyClass('mandala-page-body')
-  root.innerHTML = `
-    <canvas id="mandala" aria-label="WebGPU sacred geometry study"></canvas>
-    ${createLabHeader('mandala')}
-    <section class="mandala-summary" aria-labelledby="mandala-title">
-      <p>WebGPU study 01 / luminous symmetry</p>
-      <h1 id="mandala-title">Mandala geometry study</h1>
-    </section>
-    <div id="status" role="status" hidden></div>
-  `
+const initialPageRoute = getPageRoute(normalizePathname(window.location.pathname))
+appRoot.innerHTML = `
+  ${createLabHeader(initialPageRoute.route)}
+  <div class="study-route-root" data-study-route-root></div>
+`
 
-  const canvas = document.querySelector<HTMLCanvasElement>('#mandala')
-  const status = document.querySelector<HTMLDivElement>('#status')
+const routeRoot = appRoot.querySelector<HTMLDivElement>('[data-study-route-root]')
 
-  if (!canvas || !status) {
-    throw new Error('The mandala canvas could not be mounted.')
+if (!routeRoot) {
+  throw new Error('The route root could not be mounted.')
+}
+
+const routeRootElement = routeRoot
+
+let activePage: PageHandle | null = null
+let activeRouteKey = ''
+
+mountCurrentUrl(false)
+
+document.addEventListener('click', (event) => {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) {
+    return
   }
 
-  startMandalaRenderer(canvas).catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : 'WebGPU initialization failed.'
-    status.hidden = false
-    status.textContent = message
-  })
+  const target = event.target
+
+  if (!(target instanceof Element)) {
+    return
+  }
+
+  const link = target.closest<HTMLAnchorElement>('a[href]')
+
+  if (!link || link.target || link.hasAttribute('download')) {
+    return
+  }
+
+  const nextUrl = new URL(link.href)
+
+  if (nextUrl.origin !== window.location.origin || !isKnownRoute(normalizePathname(nextUrl.pathname))) {
+    return
+  }
+
+  event.preventDefault()
+
+  const nextRouteKey = createRouteKey(nextUrl)
+
+  if (nextRouteKey === activeRouteKey) {
+    return
+  }
+
+  history.pushState(null, '', nextUrl)
+  mountCurrentUrl(true)
+})
+
+window.addEventListener('popstate', () => {
+  mountCurrentUrl(true)
+})
+
+function mountCurrentUrl(animateCanvas: boolean): void {
+  const nextUrl = new URL(window.location.href)
+  const updatePage = (): void => {
+    activePage?.destroy()
+    activePage = null
+    window.scrollTo(0, 0)
+
+    const nextPath = normalizePathname(nextUrl.pathname)
+    const nextRoute = getPageRoute(nextPath)
+    activePage = nextRoute.mount(routeRootElement)
+    setLabHeaderActive(nextRoute.route)
+    activeRouteKey = createRouteKey(nextUrl)
+
+    if (animateCanvas && !prefersReducedMotion()) {
+      animateCanvasFallback()
+    }
+  }
+
+  updatePage()
+}
+
+function animateCanvasFallback(): void {
+  const page = routeRootElement.querySelector('.study-page')
+
+  if (!(page instanceof HTMLElement)) {
+    return
+  }
+
+  page.classList.add('is-canvas-entering')
+  window.setTimeout(() => {
+    page.classList.remove('is-canvas-entering')
+  }, 460)
+}
+
+function prefersReducedMotion(): boolean {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+function normalizePathname(pathname: string): string {
+  const normalized = pathname.replace(/\/+$/, '')
+  return normalized === '' ? '/' : normalized
+}
+
+function createRouteKey(url: URL): string {
+  return `${normalizePathname(url.pathname)}${url.search}`
+}
+
+function isKnownRoute(pathname: string): boolean {
+  return pathname in pageRoutes
+}
+
+function getPageRoute(pathname: string): PageRoute {
+  return pageRoutes[pathname] ?? pageRoutes['/']
 }

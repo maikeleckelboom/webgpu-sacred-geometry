@@ -200,6 +200,10 @@ interface PointerState {
   strength: number
 }
 
+export interface TopographyRenderer {
+  destroy: () => void
+}
+
 interface LoopPoint {
   x: number
   z: number
@@ -313,7 +317,7 @@ class ReliefBuilder {
   }
 }
 
-export async function startTopographyRenderer(canvas: HTMLCanvasElement): Promise<void> {
+export async function startTopographyRenderer(canvas: HTMLCanvasElement): Promise<TopographyRenderer> {
   if (!navigator.gpu) {
     throw new Error('This browser does not expose navigator.gpu. Use a WebGPU-capable Chromium, Edge, or Safari build.')
   }
@@ -435,16 +439,36 @@ export async function startTopographyRenderer(canvas: HTMLCanvasElement): Promis
   let multisampleTexture: GPUTexture | null = null
   let depthTexture: GPUTexture | null = null
   let postBindGroup: GPUBindGroup | null = null
+  const abortController = new AbortController()
+  let animationFrame = 0
+  let active = true
 
-  canvas.addEventListener('pointermove', (event) => {
-    const rect = canvas.getBoundingClientRect()
-    pointer.x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1
-    pointer.y = (1 - (event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1
-    pointer.strength = 1
-  })
-  canvas.addEventListener('pointerleave', () => {
-    pointer.strength = Math.min(pointer.strength, 0.15)
-  })
+  canvas.addEventListener(
+    'pointermove',
+    (event) => {
+      const rect = canvas.getBoundingClientRect()
+      pointer.x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1
+      pointer.y = (1 - (event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1
+      pointer.strength = 1
+    },
+    { signal: abortController.signal },
+  )
+  canvas.addEventListener(
+    'pointerleave',
+    () => {
+      pointer.strength = Math.min(pointer.strength, 0.15)
+    },
+    { signal: abortController.signal },
+  )
+  document.addEventListener(
+    'visibilitychange',
+    () => {
+      if (!document.hidden) {
+        scheduleFrame()
+      }
+    },
+    { signal: abortController.signal },
+  )
 
   function refreshTargets(): void {
     if (!resizeCanvas(canvas) && colorTexture && multisampleTexture && depthTexture && postBindGroup) {
@@ -512,10 +536,16 @@ export async function startTopographyRenderer(canvas: HTMLCanvasElement): Promis
   }
 
   function frame(time: number): void {
+    animationFrame = 0
+
+    if (!active || document.hidden) {
+      return
+    }
+
     refreshTargets()
 
     if (!colorTexture || !multisampleTexture || !depthTexture || !postBindGroup) {
-      requestAnimationFrame(frame)
+      scheduleFrame()
       return
     }
 
@@ -582,10 +612,41 @@ export async function startTopographyRenderer(canvas: HTMLCanvasElement): Promis
     postPass.end()
 
     device.queue.submit([encoder.finish()])
-    requestAnimationFrame(frame)
+    scheduleFrame()
   }
 
-  requestAnimationFrame(frame)
+  function scheduleFrame(): void {
+    if (!active || document.hidden || animationFrame !== 0) {
+      return
+    }
+
+    animationFrame = requestAnimationFrame(frame)
+  }
+
+  const renderer: TopographyRenderer = {
+    destroy: () => {
+      if (!active) {
+        return
+      }
+
+      active = false
+      abortController.abort()
+
+      if (animationFrame !== 0) {
+        cancelAnimationFrame(animationFrame)
+        animationFrame = 0
+      }
+
+      colorTexture?.destroy()
+      multisampleTexture?.destroy()
+      depthTexture?.destroy()
+      vertexBuffer.destroy()
+      uniformBuffer.destroy()
+    },
+  }
+
+  scheduleFrame()
+  return renderer
 }
 
 function createReliefMesh(): ReliefMesh {

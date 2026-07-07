@@ -1,6 +1,6 @@
 :root {
-  color-scheme: dark;
-  background: #000;
+  color-scheme: light;
+  background: #f8f8f5;
   font: 15px/1.4 system-ui, "Segoe UI", Roboto, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -12,43 +12,39 @@ html,
 body,
 #app {
   width: 100%;
+  min-width: 0;
   height: 100%;
   margin: 0;
 }
 
 body {
-  overflow: hidden;
-  background:
-    radial-gradient(circle at 50% 50%, rgba(15, 28, 54, 0.16), transparent 34rem),
-    #000;
+  overflow: auto;
+  background: #f8f8f5;
+}
+
+body.mandala-page-body {
+  color-scheme: dark;
+  background: #000;
+}
+
+body.flow-page-body,
+body.topography-page-body,
+body.architecture-page-body,
+body.waves-page-body {
+  color-scheme: light;
+  background: #f8f8f5;
 }
 
 #app {
   position: relative;
-  display: grid;
-  place-items: center;
-}
-
-#mandala {
-  width: min(100vw, 100svh);
-  height: min(100vw, 100svh);
   display: block;
-  background: #000;
+  min-height: 100%;
 }
 
-#status {
-  position: absolute;
-  inset: auto 1rem 1rem 1rem;
-  max-width: 38rem;
-  margin: 0 auto;
-  padding: 0.75rem 0.9rem;
-  border: 1px solid rgba(80, 180, 255, 0.36);
-  border-radius: 6px;
-  color: #d9efff;
-  background: rgba(4, 10, 20, 0.86);
-  box-shadow: 0 0 28px rgba(44, 148, 255, 0.22);
-}
-
+.study-page,
+.study-page *,
+.study-page *::before,
+.study-page *::after,
 .lab-header,
 .lab-header *,
 .lab-header *::before,
@@ -63,7 +59,10 @@ body {
   --lab-border: rgba(10, 12, 14, 0.12);
   --lab-active: #111;
 
-  position: relative;
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
   z-index: 5;
   display: grid;
   align-items: center;
@@ -75,10 +74,12 @@ body {
   background: var(--lab-surface);
   color: var(--lab-text);
   grid-template-columns: minmax(0, 1fr) auto;
+  backdrop-filter: blur(16px);
 }
 
 .lab-brand,
-.lab-nav__link {
+.lab-nav__link,
+.study-action {
   color: inherit;
   text-decoration: none;
 }
@@ -122,51 +123,263 @@ body {
   content: "";
 }
 
-body.mandala-page-body .lab-header {
-  --lab-surface: rgba(0, 0, 0, 0.74);
-  --lab-text: #f4f4ef;
-  --lab-muted: rgba(244, 244, 239, 0.58);
-  --lab-border: rgba(244, 244, 239, 0.14);
-  --lab-active: rgba(182, 234, 255, 0.9);
+.study-page {
+  --lab-header-space: 4.7rem;
+  --study-bg: #f8f8f5;
+  --study-text: #050505;
+  --study-muted: rgba(7, 8, 9, 0.66);
+  --study-kicker: rgba(5, 6, 7, 0.46);
+  --study-primary-bg: #050505;
+  --study-primary-text: #fff;
+  --study-secondary: rgba(5, 6, 7, 0.84);
+  --study-secondary-border: rgba(8, 9, 10, 0.14);
+  --study-status-bg: rgba(255, 255, 255, 0.92);
+  --study-status-border: rgba(12, 16, 20, 0.14);
+  --study-scrim:
+    linear-gradient(90deg, rgba(248, 248, 245, 0.998) 0%, rgba(248, 248, 245, 0.99) 42%, rgba(248, 248, 245, 0.72) 54%, rgba(248, 248, 245, 0.18) 72%, transparent 88%),
+    linear-gradient(180deg, rgba(248, 248, 245, 0.3) 0%, rgba(248, 248, 245, 0) 30%, rgba(248, 248, 245, 0.44) 100%);
+  --study-vignette:
+    radial-gradient(circle at 74% 48%, transparent 0%, transparent 35%, rgba(248, 248, 245, 0.22) 72%, rgba(248, 248, 245, 0.62) 100%),
+    linear-gradient(0deg, rgba(248, 248, 245, 0.98) 0%, rgba(248, 248, 245, 0.34) 16%, transparent 40%);
 
-  border-right: 1px solid var(--lab-border);
-  border-left: 1px solid var(--lab-border);
-  backdrop-filter: blur(18px);
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  min-height: 100svh;
+  overflow: hidden;
+  padding-top: var(--lab-header-space);
+  background: var(--study-bg);
+  color: var(--study-text);
+  grid-template-rows: minmax(0, 1fr);
 }
 
-body.mandala-page-body .lab-header {
-  position: fixed;
-  top: 0;
-  right: 0;
-  left: 0;
+.study-page::before,
+.study-page::after {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  content: "";
 }
 
-.mandala-summary {
-  position: fixed;
-  z-index: 4;
-  bottom: clamp(1rem, 4vw, 2.6rem);
-  left: clamp(1rem, 5vw, 3.9rem);
-  max-width: min(28rem, calc(100vw - 2rem));
-  color: rgba(246, 250, 255, 0.9);
+.study-page::before {
+  background: var(--study-scrim);
+}
+
+.study-page::after {
+  background: var(--study-vignette);
+}
+
+.study-canvas-layer {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  background: var(--study-bg);
+  contain: layout paint style;
+}
+
+.study-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--study-bg);
+}
+
+.study-hero {
+  position: relative;
+  z-index: 2;
+  align-self: center;
+  width: min(100%, 90rem);
+  margin: 0 auto;
+  padding: clamp(2.8rem, 8vh, 6.2rem) clamp(1.3rem, 5vw, 3.9rem) clamp(3rem, 8vh, 5.8rem);
   pointer-events: none;
 }
 
-.mandala-summary p {
-  margin: 0 0 0.7rem;
-  color: rgba(190, 226, 245, 0.62);
+.study-kicker {
+  max-width: 42rem;
+  margin: 0 0 clamp(1.4rem, 3vh, 2.4rem);
+  color: var(--study-kicker);
   font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
-  font-size: 0.76rem;
-  font-weight: 720;
-  letter-spacing: 0.12em;
+  font-size: clamp(0.74rem, 0.9vw, 0.86rem);
+  font-weight: 760;
+  letter-spacing: 0.14em;
+  line-height: 1.45;
   text-transform: uppercase;
 }
 
-.mandala-summary h1 {
+.study-hero h1 {
+  max-width: 45rem;
   margin: 0;
-  font-size: clamp(1.8rem, 3vw, 3.15rem);
-  font-weight: 460;
+  color: var(--study-text);
+  font-size: clamp(2.8rem, 4.25vw, 4.7rem);
+  font-weight: 450;
   letter-spacing: 0;
-  line-height: 1.04;
+  line-height: 1.06;
+}
+
+.study-subtitle {
+  max-width: 44rem;
+  margin: clamp(1.1rem, 2.2vh, 1.8rem) 0 0;
+  color: var(--study-muted);
+  font-size: clamp(1rem, 1.25vw, 1.18rem);
+  line-height: 1.62;
+}
+
+.study-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.45rem;
+  align-items: center;
+  margin-top: clamp(1.55rem, 3.3vh, 2.55rem);
+  pointer-events: auto;
+}
+
+.study-action {
+  display: inline-flex;
+  min-height: 3.7rem;
+  align-items: center;
+  justify-content: center;
+  font-weight: 720;
+}
+
+.study-action--primary {
+  min-width: 10.5rem;
+  padding: 0 1.35rem;
+  color: var(--study-primary-text);
+  background: var(--study-primary-bg);
+  box-shadow: 0 1.2rem 2.35rem rgba(0, 0, 0, 0.16);
+}
+
+.study-action--secondary {
+  min-width: 11.5rem;
+  justify-content: flex-start;
+  border-bottom: 1px solid var(--study-secondary-border);
+  color: var(--study-secondary);
+}
+
+.study-status {
+  position: fixed;
+  z-index: 6;
+  right: 1rem;
+  bottom: 1rem;
+  max-width: min(34rem, calc(100vw - 2rem));
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--study-status-border);
+  color: var(--study-text);
+  background: var(--study-status-bg);
+  box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.12);
+}
+
+.study-status[hidden] {
+  display: none;
+}
+
+.study-page--mandala {
+  --study-bg: #000;
+  --study-text: #f4f6fb;
+  --study-muted: rgba(217, 231, 244, 0.72);
+  --study-kicker: rgba(182, 234, 255, 0.72);
+  --study-primary-bg: #f4f4ef;
+  --study-primary-text: #050505;
+  --study-secondary: rgba(244, 244, 239, 0.86);
+  --study-secondary-border: rgba(182, 234, 255, 0.35);
+  --study-status-bg: rgba(4, 10, 20, 0.88);
+  --study-status-border: rgba(80, 180, 255, 0.36);
+  --study-scrim:
+    radial-gradient(circle at 50% 50%, rgba(15, 28, 54, 0.16), transparent 34rem),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.94) 0%, rgba(0, 0, 0, 0.78) 38%, rgba(0, 0, 0, 0.2) 69%, transparent 88%);
+  --study-vignette:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.42) 0%, transparent 24%, rgba(0, 0, 0, 0.58) 100%);
+}
+
+.study-page--flow {
+  --study-scrim:
+    linear-gradient(90deg, rgba(248, 248, 245, 0.995) 0%, rgba(248, 248, 245, 0.985) 38%, rgba(248, 248, 245, 0.76) 51%, rgba(248, 248, 245, 0.18) 72%, transparent 86%);
+  --study-vignette:
+    radial-gradient(circle at 72% 44%, transparent 0%, transparent 46%, rgba(248, 248, 245, 0.22) 76%, rgba(248, 248, 245, 0.58) 100%),
+    linear-gradient(0deg, rgba(248, 248, 245, 0.9) 0%, rgba(248, 248, 245, 0.22) 18%, transparent 42%);
+}
+
+.study-page--architecture {
+  --study-bg: #f2f2ee;
+  --study-scrim:
+    radial-gradient(circle at 28% 48%, rgba(255, 255, 255, 0.72), transparent 30rem),
+    linear-gradient(90deg, #f8f8f5 0%, rgba(248, 248, 245, 0.96) 34%, rgba(248, 248, 245, 0.22) 60%, transparent 86%),
+    linear-gradient(180deg, rgba(248, 248, 245, 0.72), transparent 24%, transparent 76%, rgba(248, 248, 245, 0.7));
+  --study-vignette:
+    linear-gradient(rgba(0, 0, 0, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.022) 1px, transparent 1px);
+}
+
+.study-page--architecture::after {
+  background-position: center;
+  background-size: 5rem 5rem;
+  mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.5), transparent 64%);
+}
+
+.study-page--waves {
+  --study-bg: #f8f7f2;
+  --study-scrim:
+    linear-gradient(90deg, #f8f7f2 0%, rgba(248, 247, 242, 0.98) 18%, rgba(248, 247, 242, 0.58) 32%, rgba(248, 247, 242, 0.12) 48%, transparent 66%),
+    radial-gradient(circle at 18% 48%, rgba(255, 255, 255, 0.72), transparent 24rem);
+  --study-vignette:
+    linear-gradient(180deg, rgba(248, 247, 242, 0.46) 0%, rgba(248, 247, 242, 0.14) 12%, transparent 24%),
+    linear-gradient(0deg, rgba(248, 247, 242, 0.44) 0%, rgba(248, 247, 242, 0.12) 14%, transparent 28%),
+    radial-gradient(ellipse at 70% 43%, transparent 0%, transparent 40%, rgba(248, 247, 242, 0.08) 78%, rgba(248, 247, 242, 0.28) 100%);
+}
+
+.flow-canvas {
+  background: transparent;
+  mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.2) 18%, #000 38%);
+}
+
+.mandala-canvas {
+  background: #000;
+}
+
+.topography-canvas {
+  background: #f8f8f5;
+}
+
+.architecture-canvas {
+  background: #f2f2ee;
+}
+
+.waves-canvas {
+  background: #f8f7f2;
+}
+
+.is-canvas-entering .study-canvas-layer {
+  animation: study-canvas-enter 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes study-canvas-enter {
+  from {
+    opacity: 0;
+    filter: blur(7px);
+    transform: scale(1.018);
+  }
+
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+  }
+}
+
+@keyframes study-canvas-exit {
+  from {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0.36;
+    filter: blur(5px);
+    transform: scale(1.008);
+  }
 }
 
 @media (max-width: 760px) {
@@ -189,1041 +402,74 @@ body.mandala-page-body .lab-header {
   .lab-nav::-webkit-scrollbar {
     display: none;
   }
-}
 
-body.flow-page-body {
-  overflow: auto;
-  color: #050505;
-  color-scheme: light;
-  background: #f8f8f5;
-}
+  .study-page {
+    --lab-header-space: 5.6rem;
 
-body.flow-page-body *,
-body.flow-page-body *::before,
-body.flow-page-body *::after {
-  box-sizing: border-box;
-}
+    min-height: max(100svh, 43rem);
+  }
 
-body.flow-page-body #app {
-  display: block;
-  min-height: 100%;
-  place-items: initial;
-}
+  .study-page::before {
+    background:
+      linear-gradient(180deg, rgba(248, 248, 245, 0.96) 0%, rgba(248, 248, 245, 0.7) 46%, rgba(248, 248, 245, 0.24) 100%),
+      linear-gradient(90deg, rgba(248, 248, 245, 0.98) 0%, rgba(248, 248, 245, 0.64) 58%, rgba(248, 248, 245, 0.16) 100%);
+  }
 
-.flow-page {
-  position: relative;
-  isolation: isolate;
-  display: grid;
-  min-height: 100svh;
-  overflow: hidden;
-  background: #f8f8f5;
-  grid-template-rows: 4.7rem minmax(0, 1fr) auto;
-}
+  .study-page--mandala::before {
+    background:
+      linear-gradient(180deg, rgba(0, 0, 0, 0.92) 0%, rgba(0, 0, 0, 0.72) 48%, rgba(0, 0, 0, 0.26) 100%),
+      radial-gradient(circle at 52% 54%, rgba(15, 28, 54, 0.2), transparent 24rem);
+  }
 
-.flow-page::before {
-  position: absolute;
-  z-index: 1;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(90deg, rgba(248, 248, 245, 0.995) 0%, rgba(248, 248, 245, 0.985) 38%, rgba(248, 248, 245, 0.76) 51%, rgba(248, 248, 245, 0.18) 72%, transparent 86%);
-  content: "";
-}
+  .study-hero {
+    align-self: start;
+    padding-top: clamp(3.1rem, 10vh, 6rem);
+    padding-bottom: 3rem;
+  }
 
-.flow-canvas {
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-  background: transparent;
-  mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.2) 18%, #000 38%);
-}
+  .study-hero h1 {
+    max-width: 38rem;
+    font-size: clamp(2.35rem, 12vw, 4rem);
+  }
 
-.flow-header {
-  position: relative;
-  z-index: 2;
-  display: grid;
-  align-items: center;
-  width: min(100%, 88rem);
-  margin: 0 auto;
-  padding: 0 clamp(1.4rem, 5vw, 3.8rem);
-  border-bottom: 1px solid rgba(12, 16, 20, 0.1);
-  grid-template-columns: 1fr auto;
-}
+  .study-subtitle {
+    max-width: 34rem;
+  }
 
-.flow-brand,
-.flow-nav__link,
-.flow-nav__button,
-.flow-action {
-  color: inherit;
-  text-decoration: none;
-}
+  .study-actions {
+    align-items: stretch;
+    flex-direction: column;
+    max-width: 23rem;
+  }
 
-.flow-brand {
-  font-size: clamp(0.95rem, 1vw, 1.08rem);
-  font-weight: 700;
-  letter-spacing: 0;
-}
+  .study-action,
+  .study-action--primary,
+  .study-action--secondary {
+    width: 100%;
+    min-width: 0;
+  }
 
-.flow-nav {
-  display: flex;
-  align-items: center;
-  gap: clamp(1.15rem, 2.2vw, 2rem);
-  font-size: 0.98rem;
-}
-
-.flow-nav__link {
-  position: relative;
-  display: inline-flex;
-  min-height: 2.2rem;
-  align-items: center;
-  color: rgba(8, 10, 12, 0.66);
-}
-
-.flow-nav__link.is-active {
-  color: #060606;
-}
-
-.flow-nav__link.is-active::after {
-  position: absolute;
-  right: 0;
-  bottom: 0.12rem;
-  left: 0;
-  height: 2px;
-  background: #344258;
-  content: "";
-}
-
-.flow-nav__button {
-  display: inline-flex;
-  min-height: 2.55rem;
-  align-items: center;
-  justify-content: center;
-  padding: 0 1.1rem;
-  border: 1px solid rgba(10, 12, 14, 0.13);
-  background: rgba(255, 255, 255, 0.42);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.72) inset;
-  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
-  font-size: 0.88rem;
-  letter-spacing: 0.04em;
-}
-
-.flow-hero {
-  position: relative;
-  z-index: 2;
-  width: min(100%, 88rem);
-  margin: 0 auto;
-  padding: clamp(2.2rem, 6vh, 5.2rem) clamp(1.4rem, 5vw, 3.8rem) clamp(1.5rem, 3vh, 2.4rem);
-}
-
-.flow-kicker {
-  max-width: 43rem;
-  margin: 0 0 clamp(1.5rem, 3.2vh, 2.4rem);
-  color: rgba(6, 8, 10, 0.48);
-  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
-  font-size: clamp(0.74rem, 0.9vw, 0.86rem);
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.flow-hero h1 {
-  max-width: 44rem;
-  margin: 0;
-  color: #050505;
-  font-size: clamp(2.8rem, 4.25vw, 4.7rem);
-  font-weight: 450;
-  letter-spacing: 0;
-  line-height: 1.06;
-}
-
-.flow-subtitle {
-  max-width: 44rem;
-  margin: clamp(1.1rem, 2.2vh, 1.8rem) 0 0;
-  color: rgba(7, 9, 11, 0.66);
-  font-size: clamp(1rem, 1.3vw, 1.18rem);
-  line-height: 1.65;
-}
-
-.flow-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem 1.45rem;
-  align-items: center;
-  margin-top: clamp(1.5rem, 3.2vh, 2.4rem);
-}
-
-.flow-action {
-  display: inline-flex;
-  min-height: 3.7rem;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-}
-
-.flow-action--primary {
-  min-width: 10.5rem;
-  padding: 0 1.35rem;
-  color: #fff;
-  background: #050505;
-  box-shadow: 0 1.35rem 2.2rem rgba(0, 0, 0, 0.12);
-}
-
-.flow-action--secondary {
-  min-width: 11.5rem;
-  justify-content: flex-start;
-  border-bottom: 1px solid rgba(8, 10, 12, 0.12);
-  color: rgba(5, 6, 7, 0.88);
-}
-
-.flow-cards {
-  position: relative;
-  z-index: 2;
-  display: grid;
-  border-top: 1px solid rgba(10, 12, 14, 0.1);
-  background: rgba(248, 248, 245, 0.88);
-  backdrop-filter: blur(10px);
-  grid-template-columns:
-    minmax(clamp(1.4rem, 5vw, 3.8rem), 1fr)
-    repeat(4, minmax(12rem, 22rem))
-    minmax(clamp(1.4rem, 5vw, 3.8rem), 1fr);
-}
-
-.flow-card {
-  min-height: 12.2rem;
-  padding: 2.25rem 2rem 2.1rem;
-  border-left: 1px solid rgba(10, 12, 14, 0.1);
-}
-
-.flow-card:first-child {
-  grid-column: 2;
-}
-
-.flow-card:last-child {
-  border-right: 1px solid rgba(10, 12, 14, 0.1);
-}
-
-.flow-card p {
-  margin: 0 0 1.25rem;
-  color: #344258;
-  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.13em;
-  line-height: 1.35;
-  text-transform: uppercase;
-}
-
-.flow-card h2 {
-  margin: 0;
-  color: rgba(5, 6, 7, 0.68);
-  font-size: clamp(1.02rem, 1.15vw, 1.18rem);
-  font-weight: 450;
-  letter-spacing: 0;
-  line-height: 1.55;
-}
-
-.flow-status {
-  position: fixed;
-  z-index: 4;
-  right: 1rem;
-  bottom: 1rem;
-  max-width: min(34rem, calc(100vw - 2rem));
-  padding: 0.85rem 1rem;
-  border: 1px solid rgba(12, 16, 20, 0.14);
-  color: #151515;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.12);
-}
-
-@media (max-width: 980px) {
-  .flow-page {
-    min-height: auto;
-    grid-template-rows: auto auto auto;
+  .study-action--secondary {
+    justify-content: center;
   }
 
   .flow-canvas {
-    height: 44rem;
-    mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.75) 68%, transparent 100%);
-  }
-
-  .flow-header {
-    min-height: 4.7rem;
-  }
-
-  .flow-nav {
-    gap: 1rem;
-  }
-
-  .flow-nav__link:nth-child(2),
-  .flow-nav__link:nth-child(3) {
-    display: none;
-  }
-
-  .flow-hero {
-    padding-top: clamp(4rem, 12vh, 7rem);
-  }
-
-  .flow-hero h1,
-  .flow-subtitle,
-  .flow-kicker {
-    max-width: 40rem;
-  }
-
-  .flow-cards {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .flow-card,
-  .flow-card:first-child {
-    grid-column: auto;
+    mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.76) 68%, transparent 100%);
   }
 }
 
-@media (max-width: 640px) {
-  .flow-header {
-    grid-template-columns: 1fr auto;
+@media (max-width: 430px) {
+  .study-hero h1 {
+    font-size: clamp(2.25rem, 13vw, 3.4rem);
   }
 
-  .flow-nav__link {
-    display: none;
-  }
-
-  .flow-nav__button {
-    min-height: 2.35rem;
-    padding: 0 0.85rem;
-  }
-
-  .flow-hero {
-    padding-bottom: 2.5rem;
-  }
-
-  .flow-hero h1 {
-    font-size: clamp(2.5rem, 14vw, 4rem);
-  }
-
-  .flow-actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .flow-action,
-  .flow-action--primary,
-  .flow-action--secondary {
-    width: 100%;
-    min-width: 0;
-  }
-
-  .flow-action--secondary {
-    justify-content: center;
-  }
-
-  .flow-cards {
-    grid-template-columns: 1fr;
-  }
-
-  .flow-card {
-    min-height: auto;
-    padding: 1.65rem 1.4rem;
-    border-right: 0;
+  .study-kicker {
+    letter-spacing: 0.1em;
   }
 }
 
-body.topography-page-body {
-  overflow: auto;
-  color: #070707;
-  color-scheme: light;
-  background: #f8f8f5;
-}
-
-body.topography-page-body *,
-body.topography-page-body *::before,
-body.topography-page-body *::after {
-  box-sizing: border-box;
-}
-
-body.topography-page-body #app {
-  display: block;
-  min-height: 100%;
-  place-items: initial;
-}
-
-.topography-page {
-  position: relative;
-  isolation: isolate;
-  display: grid;
-  min-height: 100svh;
-  overflow: hidden;
-  background: #f8f8f5;
-  grid-template-rows: 4.7rem minmax(0, 1fr) auto;
-}
-
-.topography-page::before,
-.topography-page::after {
-  position: absolute;
-  z-index: 1;
-  inset: 4.7rem 0 0;
-  pointer-events: none;
-  content: "";
-}
-
-.topography-page::before {
-  background:
-    linear-gradient(90deg, rgba(248, 248, 245, 0.998) 0%, rgba(248, 248, 245, 0.99) 42%, rgba(248, 248, 245, 0.72) 54%, rgba(248, 248, 245, 0.18) 72%, transparent 88%),
-    linear-gradient(180deg, rgba(248, 248, 245, 0.3) 0%, rgba(248, 248, 245, 0) 30%, rgba(248, 248, 245, 0.44) 100%);
-}
-
-.topography-page::after {
-  background:
-    radial-gradient(circle at 74% 48%, transparent 0%, transparent 35%, rgba(248, 248, 245, 0.22) 72%, rgba(248, 248, 245, 0.62) 100%),
-    linear-gradient(0deg, rgba(248, 248, 245, 0.98) 0%, rgba(248, 248, 245, 0.34) 16%, transparent 40%);
-  mix-blend-mode: normal;
-}
-
-.topography-canvas {
-  position: absolute;
-  z-index: 0;
-  inset: 4.7rem 0 0;
-  display: block;
-  width: 100%;
-  height: auto;
-  background: #f8f8f5;
-}
-
-.topography-header {
-  position: relative;
-  z-index: 2;
-  display: grid;
-  align-items: center;
-  width: min(100%, 90rem);
-  min-height: 4.7rem;
-  margin: 0 auto;
-  padding: 0 clamp(1.3rem, 5vw, 3.9rem);
-  border-bottom: 1px solid rgba(12, 14, 16, 0.11);
-  background: rgba(248, 248, 245, 0.96);
-  grid-template-columns: 1fr auto;
-}
-
-.topography-brand,
-.topography-nav__link,
-.topography-nav__button,
-.topography-action {
-  color: inherit;
-  text-decoration: none;
-}
-
-.topography-brand {
-  font-size: clamp(0.95rem, 1vw, 1.08rem);
-  font-weight: 720;
-  letter-spacing: 0;
-}
-
-.topography-nav {
-  display: flex;
-  align-items: center;
-  gap: clamp(1rem, 2vw, 1.85rem);
-  font-size: 0.97rem;
-}
-
-.topography-nav__link {
-  position: relative;
-  display: inline-flex;
-  min-height: 2.25rem;
-  align-items: center;
-  color: rgba(7, 8, 9, 0.6);
-}
-
-.topography-nav__link.is-active {
-  color: #050505;
-}
-
-.topography-nav__link.is-active::after {
-  position: absolute;
-  right: 0;
-  bottom: 0.1rem;
-  left: 0;
-  height: 2px;
-  background: #111;
-  content: "";
-}
-
-.topography-nav__button {
-  display: inline-flex;
-  min-height: 2.55rem;
-  align-items: center;
-  justify-content: center;
-  padding: 0 1.05rem;
-  border: 1px solid rgba(8, 9, 10, 0.15);
-  background: rgba(255, 255, 255, 0.4);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.72) inset;
-  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
-  font-size: 0.86rem;
-  letter-spacing: 0.04em;
-}
-
-.topography-hero {
-  position: relative;
-  z-index: 2;
-  align-self: center;
-  width: min(100%, 88rem);
-  margin: 0 auto;
-  padding: clamp(2.2rem, 6vh, 5.2rem) clamp(1.4rem, 5vw, 3.8rem) clamp(1.5rem, 3vh, 2.4rem);
-}
-
-.topography-kicker {
-  max-width: 42rem;
-  margin: 0 0 clamp(1.4rem, 3vh, 2.4rem);
-  color: rgba(5, 6, 7, 0.46);
-  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
-  font-size: clamp(0.74rem, 0.9vw, 0.86rem);
-  font-weight: 760;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.topography-hero h1 {
-  max-width: 44rem;
-  margin: 0;
-  color: #050505;
-  font-size: clamp(2.8rem, 4.25vw, 4.7rem);
-  font-weight: 450;
-  letter-spacing: 0;
-  line-height: 1.06;
-}
-
-.topography-subtitle {
-  max-width: 44rem;
-  margin: clamp(1.1rem, 2.2vh, 1.8rem) 0 0;
-  color: rgba(7, 8, 9, 0.63);
-  font-size: clamp(1rem, 1.25vw, 1.18rem);
-  line-height: 1.62;
-}
-
-.topography-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem 1.45rem;
-  align-items: center;
-  margin-top: clamp(1.55rem, 3.3vh, 2.55rem);
-}
-
-.topography-action {
-  display: inline-flex;
-  min-height: 3.7rem;
-  align-items: center;
-  justify-content: center;
-  font-weight: 720;
-}
-
-.topography-action--primary {
-  min-width: 10.5rem;
-  padding: 0 1.35rem;
-  color: #f8f8f5;
-  background: #050505;
-  box-shadow: 0 1.2rem 2.35rem rgba(0, 0, 0, 0.16);
-}
-
-.topography-action--secondary {
-  min-width: 11.5rem;
-  justify-content: flex-start;
-  border-bottom: 1px solid rgba(8, 9, 10, 0.14);
-  color: rgba(5, 6, 7, 0.82);
-}
-
-.topography-cards {
-  position: relative;
-  z-index: 2;
-  display: grid;
-  border-top: 1px solid rgba(9, 10, 11, 0.12);
-  background: rgba(248, 248, 245, 0.9);
-  backdrop-filter: blur(10px);
-  grid-template-columns:
-    minmax(clamp(1.3rem, 5vw, 3.9rem), 1fr)
-    repeat(4, minmax(12rem, 22rem))
-    minmax(clamp(1.3rem, 5vw, 3.9rem), 1fr);
-}
-
-.topography-card {
-  min-height: 12.2rem;
-  padding: 2.25rem 2rem 2.1rem;
-  border-left: 1px solid rgba(9, 10, 11, 0.12);
-}
-
-.topography-card:first-child {
-  grid-column: 2;
-}
-
-.topography-card:last-child {
-  border-right: 1px solid rgba(9, 10, 11, 0.12);
-}
-
-.topography-card p {
-  margin: 0 0 1.05rem;
-  color: rgba(5, 6, 7, 0.52);
-  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
-  font-size: 0.76rem;
-  font-weight: 820;
-  letter-spacing: 0.13em;
-  line-height: 1.35;
-  text-transform: uppercase;
-}
-
-.topography-card h2 {
-  margin: 0;
-  color: rgba(5, 6, 7, 0.72);
-  font-size: clamp(1rem, 1.1vw, 1.16rem);
-  font-weight: 440;
-  letter-spacing: 0;
-  line-height: 1.52;
-}
-
-.topography-status {
-  position: fixed;
-  z-index: 4;
-  right: 1rem;
-  bottom: 1rem;
-  max-width: min(34rem, calc(100vw - 2rem));
-  padding: 0.85rem 1rem;
-  border: 1px solid rgba(12, 16, 20, 0.14);
-  color: #151515;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.12);
-}
-
-@media (max-width: 1040px) {
-  .topography-page {
-    min-height: auto;
-    grid-template-rows: auto auto auto;
-  }
-
-  .topography-canvas {
-    min-height: 100%;
-  }
-
-  .topography-hero {
-    min-height: 35rem;
-    padding-top: clamp(4rem, 11vh, 7rem);
-  }
-
-  .topography-hero h1,
-  .topography-subtitle,
-  .topography-kicker {
-    max-width: 40rem;
-  }
-
-  .topography-cards {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .topography-card,
-  .topography-card:first-child {
-    grid-column: auto;
-  }
-}
-
-@media (max-width: 700px) {
-  .topography-page::before {
-    background:
-      linear-gradient(180deg, rgba(242, 242, 238, 0.92) 0%, rgba(242, 242, 238, 0.72) 58%, rgba(242, 242, 238, 0.34) 100%),
-      linear-gradient(90deg, rgba(242, 242, 238, 0.95) 0%, rgba(242, 242, 238, 0.58) 66%, rgba(242, 242, 238, 0.16) 100%);
-  }
-
-  .topography-nav__link {
-    display: none;
-  }
-
-  .topography-nav__button {
-    min-height: 2.35rem;
-    padding: 0 0.85rem;
-  }
-
-  .topography-hero {
-    min-height: 38rem;
-    padding-top: 2.6rem;
-    padding-bottom: 2.5rem;
-  }
-
-  .topography-hero h1 {
-    font-size: clamp(2.45rem, 13vw, 4.05rem);
-  }
-
-  .topography-actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .topography-action,
-  .topography-action--primary,
-  .topography-action--secondary {
-    width: 100%;
-    min-width: 0;
-  }
-
-  .topography-action--secondary {
-    justify-content: center;
-  }
-
-  .topography-cards {
-    grid-template-columns: 1fr;
-  }
-
-  .topography-card {
-    min-height: auto;
-    padding: 1.6rem 1.35rem;
-    border-right: 0;
-  }
-}
-
-body.architecture-page-body {
-  overflow: auto;
-  color: #080808;
-  color-scheme: light;
-  background: #f2f2ee;
-}
-
-body.architecture-page-body *,
-body.architecture-page-body *::before,
-body.architecture-page-body *::after {
-  box-sizing: border-box;
-}
-
-body.architecture-page-body #app {
-  display: block;
-  min-height: 100%;
-  place-items: initial;
-}
-
-.architecture-page {
-  display: grid;
-  min-height: 100svh;
-  background: #f2f2ee;
-  grid-template-rows: auto minmax(42rem, 1fr) auto;
-}
-
-.architecture-stage {
-  position: relative;
-  isolation: isolate;
-  min-height: min(72rem, calc(100svh - 4.7rem));
-  overflow: hidden;
-  background:
-    linear-gradient(90deg, rgba(248, 248, 245, 0.995) 0%, rgba(248, 248, 245, 0.98) 35%, rgba(248, 248, 245, 0.72) 50%, rgba(248, 248, 245, 0.08) 78%, transparent 100%),
-    linear-gradient(180deg, rgba(248, 248, 245, 0.6) 0%, rgba(248, 248, 245, 0.08) 46%, rgba(248, 248, 245, 0.62) 100%),
-    #f2f2ee;
-}
-
-.architecture-stage::before,
-.architecture-stage::after {
-  position: absolute;
-  z-index: 2;
-  inset: 0;
-  pointer-events: none;
-  content: "";
-}
-
-.architecture-stage::before {
-  background:
-    radial-gradient(circle at 28% 48%, rgba(255, 255, 255, 0.72), transparent 30rem),
-    linear-gradient(90deg, #f8f8f5 0%, rgba(248, 248, 245, 0.96) 34%, rgba(248, 248, 245, 0.22) 60%, transparent 86%),
-    linear-gradient(180deg, rgba(248, 248, 245, 0.72), transparent 24%, transparent 76%, rgba(248, 248, 245, 0.7));
-}
-
-.architecture-stage::after {
-  background-image:
-    linear-gradient(rgba(0, 0, 0, 0.028) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.022) 1px, transparent 1px);
-  background-position: center;
-  background-size: 5rem 5rem;
-  mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.5), transparent 64%);
-}
-
-.architecture-canvas {
-  position: absolute;
-  z-index: 1;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-  background: #f2f2ee;
-}
-
-.architecture-copy {
-  position: relative;
-  z-index: 3;
-  width: min(100%, 90rem);
-  margin: 0 auto;
-  padding: clamp(4rem, 9vh, 7.5rem) clamp(1.3rem, 5vw, 3.9rem);
-  pointer-events: none;
-}
-
-.architecture-kicker {
-  max-width: 42rem;
-  margin: 0 0 clamp(1.2rem, 2.6vh, 2rem);
-  color: rgba(45, 52, 58, 0.54);
-  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
-  font-size: clamp(0.74rem, 0.9vw, 0.86rem);
-  font-weight: 760;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  pointer-events: auto;
-}
-
-.architecture-copy h1 {
-  max-width: 34rem;
-  margin: 0;
-  color: #050505;
-  font-size: clamp(3rem, 5.8vw, 6.9rem);
-  font-weight: 430;
-  letter-spacing: 0;
-  line-height: 0.95;
-  pointer-events: auto;
-}
-
-.architecture-copy p:not(.architecture-kicker) {
-  max-width: 29rem;
-  margin: clamp(1.2rem, 2.5vh, 1.8rem) 0 0;
-  color: rgba(7, 8, 9, 0.66);
-  font-size: clamp(1rem, 1.22vw, 1.18rem);
-  line-height: 1.68;
-  pointer-events: auto;
-}
-
-.architecture-status {
-  position: absolute;
-  z-index: 4;
-  right: clamp(1rem, 4vw, 2.6rem);
-  bottom: clamp(1rem, 4vw, 2.6rem);
-  max-width: min(32rem, calc(100vw - 2rem));
-  padding: 0.95rem 1.05rem;
-  border: 1px solid rgba(10, 12, 14, 0.14);
-  color: #121212;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.12);
-}
-
-.architecture-strip {
-  display: grid;
-  border-top: 1px solid rgba(10, 12, 14, 0.12);
-  background: rgba(248, 248, 245, 0.94);
-  grid-template-columns:
-    minmax(clamp(1.3rem, 5vw, 3.9rem), 1fr)
-    repeat(4, minmax(10rem, 21rem))
-    minmax(clamp(1.3rem, 5vw, 3.9rem), 1fr);
-}
-
-.architecture-strip div {
-  min-height: 7.8rem;
-  padding: 1.65rem 1.55rem;
-  border-left: 1px solid rgba(10, 12, 14, 0.12);
-}
-
-.architecture-strip div:first-child {
-  grid-column: 2;
-}
-
-.architecture-strip div:last-child {
-  border-right: 1px solid rgba(10, 12, 14, 0.12);
-}
-
-.architecture-strip span,
-.architecture-strip strong {
-  display: block;
-}
-
-.architecture-strip span {
-  margin-bottom: 0.8rem;
-  color: rgba(5, 6, 7, 0.48);
-  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
-  font-size: 0.74rem;
-  font-weight: 780;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-}
-
-.architecture-strip strong {
-  color: rgba(5, 6, 7, 0.74);
-  font-size: clamp(1rem, 1.08vw, 1.12rem);
-  font-weight: 460;
-  letter-spacing: 0;
-  line-height: 1.45;
-}
-
-@media (max-width: 980px) {
-  .architecture-page {
-    grid-template-rows: auto minmax(39rem, auto) auto;
-  }
-
-  .architecture-stage {
-    min-height: 44rem;
-  }
-
-  .architecture-stage {
-    background:
-      linear-gradient(180deg, rgba(248, 248, 245, 0.98) 0%, rgba(248, 248, 245, 0.72) 42%, rgba(248, 248, 245, 0.2) 72%, rgba(248, 248, 245, 0.82) 100%),
-      #f2f2ee;
-  }
-
-  .architecture-copy {
-    padding-top: clamp(3.2rem, 8vh, 5.6rem);
-  }
-
-  .architecture-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .architecture-strip div,
-  .architecture-strip div:first-child {
-    grid-column: auto;
-  }
-}
-
-@media (max-width: 640px) {
-  .architecture-stage {
-    min-height: 48rem;
-  }
-
-  .architecture-copy h1 {
-    font-size: clamp(2.7rem, 16vw, 4.9rem);
-  }
-
-  .architecture-copy p:not(.architecture-kicker) {
-    max-width: 29rem;
-  }
-
-  .architecture-strip {
-    grid-template-columns: 1fr;
-  }
-
-  .architecture-strip div {
-    min-height: auto;
-    padding: 1.3rem 1.35rem;
-    border-right: 0;
-  }
-}
-
-body.waves-page-body {
-  overflow: hidden;
-  color: #050505;
-  color-scheme: light;
-  background: #f8f7f2;
-}
-
-body.waves-page-body *,
-body.waves-page-body *::before,
-body.waves-page-body *::after {
-  box-sizing: border-box;
-}
-
-body.waves-page-body #app {
-  display: block;
-  min-height: 100%;
-  place-items: initial;
-}
-
-.waves-page {
-  position: relative;
-  min-height: 100svh;
-  overflow: hidden;
-  isolation: isolate;
-  background: #f8f7f2;
-}
-
-body.waves-page-body .lab-header {
-  position: fixed;
-  top: 0;
-  right: 0;
-  left: 0;
-  --lab-surface: rgba(248, 247, 242, 0.82);
-  --lab-border: rgba(10, 12, 14, 0.1);
-  backdrop-filter: blur(16px);
-}
-
-.waves-page::before,
-.waves-page::after {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  content: "";
-}
-
-.waves-page::before {
-  z-index: 1;
-  background:
-    linear-gradient(90deg, #f8f7f2 0%, rgba(248, 247, 242, 0.98) 13%, rgba(248, 247, 242, 0.58) 24%, rgba(248, 247, 242, 0.12) 38%, transparent 58%),
-    radial-gradient(circle at 15% 48%, rgba(255, 255, 255, 0.72), transparent 23rem);
-}
-
-.waves-page::after {
-  z-index: 2;
-  background:
-    linear-gradient(180deg, rgba(248, 247, 242, 0.46) 0%, rgba(248, 247, 242, 0.14) 12%, transparent 24%),
-    linear-gradient(0deg, rgba(248, 247, 242, 0.44) 0%, rgba(248, 247, 242, 0.12) 14%, transparent 28%),
-    radial-gradient(ellipse at 70% 43%, transparent 0%, transparent 40%, rgba(248, 247, 242, 0.08) 78%, rgba(248, 247, 242, 0.28) 100%);
-}
-
-.waves-canvas {
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-  background: #f8f7f2;
-}
-
-.waves-copy {
-  position: absolute;
-  z-index: 3;
-  top: clamp(8.5rem, 31vh, 15.5rem);
-  left: clamp(-8.5rem, -12vw, -4.8rem);
-  width: min(37rem, 74vw);
-  color: #050505;
-  pointer-events: none;
-}
-
-.waves-copy h1 {
-  margin: 0 0 clamp(1.65rem, 4vh, 2.3rem);
-  font-size: clamp(2.85rem, 5.7vw, 4.8rem);
-  font-weight: 410;
-  letter-spacing: 0;
-  line-height: 1.14;
-}
-
-.waves-copy p {
-  max-width: 26rem;
-  margin: 0;
-  color: rgba(5, 6, 7, 0.78);
-  font-size: clamp(0.9rem, 1.25vw, 1.06rem);
-  line-height: 1.72;
-}
-
-.waves-status {
-  position: fixed;
-  z-index: 5;
-  right: 1rem;
-  bottom: 1rem;
-  max-width: min(34rem, calc(100vw - 2rem));
-  padding: 0.85rem 1rem;
-  border: 1px solid rgba(12, 16, 20, 0.14);
-  color: #151515;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.12);
-}
-
-@media (max-width: 760px) {
-  .waves-page::before {
-    background:
-      linear-gradient(180deg, rgba(248, 247, 242, 0.96) 0%, rgba(248, 247, 242, 0.7) 42%, rgba(248, 247, 242, 0.22) 100%),
-      linear-gradient(90deg, rgba(248, 247, 242, 0.98) 0%, rgba(248, 247, 242, 0.72) 52%, rgba(248, 247, 242, 0.12) 100%);
-  }
-
-  .waves-copy {
-    top: clamp(8rem, 28vh, 12rem);
-    left: -2.35rem;
-    width: calc(100vw - 1rem);
-  }
-
-  .waves-copy h1 {
-    font-size: clamp(2.7rem, 14vw, 4rem);
+@media (prefers-reduced-motion: reduce) {
+  .is-canvas-entering .study-canvas-layer {
+    animation: none;
   }
 }

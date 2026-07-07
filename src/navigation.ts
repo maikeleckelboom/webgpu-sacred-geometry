@@ -13,7 +13,7 @@ export function createLabHeader(activeRoute: LabRoute): string {
     .map(({ route, href, label }) => {
       const activeClass = route === activeRoute ? ' is-active' : ''
       const ariaCurrent = route === activeRoute ? ' aria-current="page"' : ''
-      return `<a class="lab-nav__link${activeClass}" href="${href}"${ariaCurrent}>${label}</a>`
+      return `<a class="lab-nav__link${activeClass}" href="${href}" data-route="${route}"${ariaCurrent}>${label}</a>`
     })
     .join('')
 
@@ -25,4 +25,19 @@ export function createLabHeader(activeRoute: LabRoute): string {
       </nav>
     </header>
   `
+}
+
+export function setLabHeaderActive(activeRoute: LabRoute): void {
+  const links = document.querySelectorAll<HTMLAnchorElement>('.lab-nav__link[data-route]')
+
+  for (const link of links) {
+    const isActive = link.dataset.route === activeRoute
+    link.classList.toggle('is-active', isActive)
+
+    if (isActive) {
+      link.setAttribute('aria-current', 'page')
+    } else {
+      link.removeAttribute('aria-current')
+    }
+  }
 }

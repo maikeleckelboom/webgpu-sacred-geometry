@@ -55,7 +55,11 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
 }
 `
 
-export async function startMandalaRenderer(canvas: HTMLCanvasElement): Promise<void> {
+export interface MandalaRenderer {
+  destroy: () => void
+}
+
+export async function startMandalaRenderer(canvas: HTMLCanvasElement): Promise<MandalaRenderer> {
   if (!navigator.gpu) {
     throw new Error('This browser does not expose navigator.gpu. Use a WebGPU-capable Chromium, Edge, or Safari build.')
   }
@@ -160,8 +164,27 @@ export async function startMandalaRenderer(canvas: HTMLCanvasElement): Promise<v
   })
 
   const uniforms = new Float32Array(4)
+  const abortController = new AbortController()
+  let animationFrame = 0
+  let active = true
+
+  document.addEventListener(
+    'visibilitychange',
+    () => {
+      if (!document.hidden) {
+        scheduleFrame()
+      }
+    },
+    { signal: abortController.signal },
+  )
 
   function frame(time: number): void {
+    animationFrame = 0
+
+    if (!active || document.hidden) {
+      return
+    }
+
     if (resizeCanvas(canvas)) {
       gpuContext.configure({
         device,
@@ -199,10 +222,38 @@ export async function startMandalaRenderer(canvas: HTMLCanvasElement): Promise<v
     pass.end()
 
     device.queue.submit([encoder.finish()])
-    requestAnimationFrame(frame)
+    scheduleFrame()
   }
 
-  requestAnimationFrame(frame)
+  function scheduleFrame(): void {
+    if (!active || document.hidden || animationFrame !== 0) {
+      return
+    }
+
+    animationFrame = requestAnimationFrame(frame)
+  }
+
+  const renderer: MandalaRenderer = {
+    destroy: () => {
+      if (!active) {
+        return
+      }
+
+      active = false
+      abortController.abort()
+
+      if (animationFrame !== 0) {
+        cancelAnimationFrame(animationFrame)
+        animationFrame = 0
+      }
+
+      vertexBuffer.destroy()
+      uniformBuffer.destroy()
+    },
+  }
+
+  scheduleFrame()
+  return renderer
 }
 
 function resizeCanvas(canvas: HTMLCanvasElement): boolean {

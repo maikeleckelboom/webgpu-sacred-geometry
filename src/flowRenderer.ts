@@ -411,7 +411,11 @@ interface PointerState {
   strength: number
 }
 
-export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise<void> {
+export interface FlowFieldRenderer {
+  destroy: () => void
+}
+
+export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise<FlowFieldRenderer> {
   if (!navigator.gpu) {
     throw new Error('This browser does not expose navigator.gpu. Use a WebGPU-capable Chromium, Edge, or Safari build.')
   }
@@ -513,6 +517,8 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
   let postBindGroup: GPUBindGroup | null = null
   let sourceIndex = 0
   let lastTime = 0
+  let animationFrame = 0
+  let active = true
 
   function refreshTargets(): void {
     if (!resizeCanvas(canvas) && offscreenTexture && postBindGroup) {
@@ -552,10 +558,16 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
   }
 
   function frame(time: number): void {
+    animationFrame = 0
+
+    if (!active) {
+      return
+    }
+
     refreshTargets()
 
     if (!offscreenTexture || !postBindGroup) {
-      requestAnimationFrame(frame)
+      scheduleFrame()
       return
     }
 
@@ -633,10 +645,40 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
 
     device.queue.submit([encoder.finish()])
     sourceIndex = targetIndex
-    requestAnimationFrame(frame)
+    scheduleFrame()
   }
 
-  requestAnimationFrame(frame)
+  function scheduleFrame(): void {
+    if (!active || animationFrame !== 0) {
+      return
+    }
+
+    animationFrame = requestAnimationFrame(frame)
+  }
+
+  const renderer: FlowFieldRenderer = {
+    destroy: () => {
+      if (!active) {
+        return
+      }
+
+      active = false
+
+      if (animationFrame !== 0) {
+        cancelAnimationFrame(animationFrame)
+        animationFrame = 0
+      }
+
+      offscreenTexture?.destroy()
+      particleBuffers[0].destroy()
+      particleBuffers[1].destroy()
+      simBuffer.destroy()
+      renderBuffer.destroy()
+    },
+  }
+
+  scheduleFrame()
+  return renderer
 }
 
 function createStorageBuffer(device: GPUDevice, label: string, size: number): GPUBuffer {
