@@ -116,18 +116,17 @@ fn lensGravity(point: vec2f, lens: vec2f, radius: f32, mass: f32, spin: f32) -> 
 }
 
 fn burstFlow(point: vec2f, seed: f32) -> vec2f {
-  let toPoint = point - sim.burstOrigin;
-  let distance = max(length(toPoint), 0.001);
-  let direction = toPoint / distance;
+  let offset = point - sim.burstOrigin;
+  let screenOffset = vec2f(offset.x * sim.aspect, offset.y);
+  let distance = max(length(screenOffset), 0.001);
+  let direction = offset / max(length(offset), 0.001);
   let tangent = vec2f(-direction.y, direction.x);
-  let radius = 0.035 + sim.burstAge * 1.05;
-  let ringDelta = distance - radius;
-  let ring = exp(-(ringDelta * ringDelta) * 42.0);
-  let core = 1.0 - smoothstep(0.04, 0.5, distance);
-  let temporalFade = 1.0 - smoothstep(0.52, 1.36, sim.burstAge);
-  let sparkle = 0.84 + sin(seed * 0.037 + sim.burstSeed * 11.0 + sim.time * 9.0) * 0.16;
-  let strength = sim.burstStrength * temporalFade * sparkle * (ring * 1.18 + core * 0.38);
-  return direction * strength * 0.54 + tangent * strength * 0.78;
+  let pin = exp(-(distance * distance) * 92.0);
+  let halo = exp(-(distance * distance) * 22.0);
+  let temporalFade = exp(-sim.burstAge * 5.2);
+  let sparkle = 0.88 + sin(seed * 0.037 + sim.burstSeed * 11.0 + sim.time * 12.0) * 0.12;
+  let strength = sim.burstStrength * temporalFade * sparkle * (pin * 1.0 + halo * 0.28);
+  return direction * strength * 0.26 + tangent * strength * 0.64;
 }
 
 @compute @workgroup_size(${WORKGROUP_SIZE})
@@ -309,19 +308,18 @@ fn rightSideMask(position: vec2f) -> f32 {
 }
 
 fn burstWake(point: vec2f, seed: f32) -> f32 {
-  let distance = length(point - render.burstOrigin);
-  let radius = 0.045 + render.burstAge * 1.08;
-  let ringDelta = distance - radius;
-  let ring = exp(-(ringDelta * ringDelta) * 54.0);
-  let core = 1.0 - smoothstep(0.03, 0.48, distance);
-  let temporalFade = 1.0 - smoothstep(0.56, 1.42, render.burstAge);
+  let offset = point - render.burstOrigin;
+  let distance = length(vec2f(offset.x * render.aspect, offset.y));
+  let pin = exp(-(distance * distance) * 104.0);
+  let halo = exp(-(distance * distance) * 28.0);
+  let temporalFade = exp(-render.burstAge * 5.6);
   let shimmer = 0.86 + sin(seed * 0.021 + render.time * 12.0) * 0.14;
-  return render.burstStrength * temporalFade * shimmer * (ring * 1.12 + core * 0.32);
+  return render.burstStrength * temporalFade * shimmer * (pin * 1.0 + halo * 0.24);
 }
 
 fn burstColor(seed: f32) -> vec3f {
   let phase = 0.5 + sin(seed * 0.019 + render.burstAge * 11.0) * 0.5;
-  return mix(vec3f(0.98, 0.52, 0.17), vec3f(0.32, 0.84, 0.98), phase);
+  return mix(vec3f(0.9, 0.62, 0.28), vec3f(0.42, 0.8, 0.94), phase);
 }
 
 @vertex
@@ -339,13 +337,13 @@ fn lineVertex(
   let normal = vec2f(screenNormal.x * ndcPixel.x, screenNormal.y * ndcPixel.y);
   let pointerWake = (1.0 - smoothstep(0.035, 0.5, length(particle.position - render.pointer))) * render.pointerStrength;
   let burst = burstWake(particle.position, particle.seed);
-  let trail = 0.012 + speed * 0.056 + particle.depth * 0.018 + pointerWake * 0.045 + burst * 0.06;
+  let trail = 0.012 + speed * 0.056 + particle.depth * 0.018 + pointerWake * 0.045 + burst * 0.032;
   let head = particle.position;
   let tail = head - direction * trail;
   let center = mix(tail, head, corner.x);
   let focusBand = 1.0 - abs(particle.depth - 0.56) * 1.7;
   let blur = smoothstep(0.82, 1.0, particle.depth) + smoothstep(0.08, 0.0, particle.depth);
-  let widthPixels = 0.24 + clamp(focusBand, 0.0, 1.0) * 0.38 + blur * 0.48 + speed * 2.35 + pointerWake * 0.95 + burst * 1.65;
+  let widthPixels = 0.24 + clamp(focusBand, 0.0, 1.0) * 0.38 + blur * 0.48 + speed * 2.35 + pointerWake * 0.95 + burst * 0.82;
   let position = center + normal * corner.y * widthPixels;
   let mask = rightSideMask(particle.position);
   let energy = fieldEnergy(particle.position, render.time);
@@ -356,8 +354,8 @@ fn lineVertex(
   out.local = corner;
   out.color = mix(vec3f(0.62, 0.67, 0.7), vec3f(0.18, 0.19, 0.2), particle.depth);
   out.color = mix(out.color, vec3f(0.48, 0.76, 0.94), max(glint, pointerWake * 0.55));
-  out.color = mix(out.color, burstColor(particle.seed), clamp(burst * 0.82, 0.0, 1.0));
-  out.alpha = render.opacity * mask * lifeFade(particle) * (0.015 + energy * 0.041 + (1.0 - particle.depth) * 0.008 + glint * 0.062 + pointerWake * 0.062 + burst * 0.092);
+  out.color = mix(out.color, burstColor(particle.seed), clamp(burst * 0.54, 0.0, 1.0));
+  out.alpha = render.opacity * mask * lifeFade(particle) * (0.015 + energy * 0.041 + (1.0 - particle.depth) * 0.008 + glint * 0.062 + pointerWake * 0.062 + burst * 0.052);
   return out;
 }
 
@@ -385,7 +383,7 @@ fn spriteVertex(
   let pointerWake = (1.0 - smoothstep(0.02, 0.43, length(particle.position - render.pointer))) * render.pointerStrength;
   let burst = burstWake(particle.position, particle.seed);
   let pulse = 0.92 + sin(render.time * 1.8 + particle.seed * 0.031) * 0.08;
-  let radiusPixels = (0.42 + marker * (1.55 + energy * 1.45) + node * 0.8 + glint * 3.6 + pointerWake * 2.4 + burst * 4.2) * pulse;
+  let radiusPixels = (0.42 + marker * (1.55 + energy * 1.45) + node * 0.8 + glint * 3.6 + pointerWake * 2.4 + burst * 1.7) * pulse;
   let position = particle.position + corner * ndcPixel * radiusPixels;
   let mask = rightSideMask(particle.position);
 
@@ -393,8 +391,8 @@ fn spriteVertex(
   out.position = vec4f(position, 0.0, 1.0);
   out.local = corner;
   out.color = mix(vec3f(0.035, 0.038, 0.041), vec3f(0.46, 0.76, 0.94), max(glint, pointerWake * 0.52));
-  out.color = mix(out.color, burstColor(particle.seed + 17.0), clamp(burst * 0.95, 0.0, 1.0));
-  out.alpha = render.opacity * mask * lifeFade(particle) * (marker * (0.12 + energy * 0.17) + node * 0.05 + glint * 0.3 + pointerWake * 0.24 + burst * 0.34);
+  out.color = mix(out.color, burstColor(particle.seed + 17.0), clamp(burst * 0.7, 0.0, 1.0));
+  out.alpha = render.opacity * mask * lifeFade(particle) * (marker * (0.12 + energy * 0.17) + node * 0.05 + glint * 0.3 + pointerWake * 0.24 + burst * 0.17);
   return out;
 }
 
@@ -450,16 +448,15 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOut {
 fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
   let center = textureSample(sceneTexture, postSampler, input.uv);
   let point = input.uv * 2.0 - vec2f(1.0);
-  let distance = length(point - render.burstOrigin);
-  let radius = 0.055 + render.burstAge * 1.12;
-  let ringDelta = distance - radius;
-  let ring = exp(-(ringDelta * ringDelta) * 96.0);
-  let outer = exp(-(ringDelta * ringDelta) * 24.0);
-  let core = 1.0 - smoothstep(0.035, 0.24, distance);
-  let temporalFade = 1.0 - smoothstep(0.64, 1.5, render.burstAge);
-  let ripple = 0.82 + sin(ringDelta * 72.0 - render.time * 9.0) * 0.18;
-  let burstAlpha = render.burstStrength * temporalFade * ripple * (ring * 0.18 + outer * 0.045 + core * 0.035);
-  let burstColor = mix(vec3f(0.98, 0.5, 0.14), vec3f(0.28, 0.82, 1.0), smoothstep(0.05, 0.72, render.burstAge));
+  let offset = point - render.burstOrigin;
+  let screenOffset = vec2f(offset.x * render.aspect, offset.y);
+  let distance = length(screenOffset);
+  let pin = exp(-(distance * distance) * 360.0);
+  let haze = exp(-(distance * distance) * 82.0);
+  let grain = 0.86 + sin((screenOffset.x - screenOffset.y) * 46.0 + render.time * 9.0) * 0.14;
+  let temporalFade = exp(-render.burstAge * 6.4);
+  let burstAlpha = render.burstStrength * temporalFade * grain * (pin * 0.11 + haze * 0.026);
+  let burstColor = mix(vec3f(0.72, 0.9, 0.98), vec3f(0.92, 0.66, 0.34), smoothstep(0.0, 0.18, render.burstAge) * 0.42);
   let alpha = clamp(center.a + burstAlpha, 0.0, 0.92);
   let color = min(center.rgb + burstColor * burstAlpha, vec3f(alpha));
   return vec4f(color, alpha);
@@ -588,7 +585,6 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
     'pointermove',
     (event) => {
       updatePointerFromEvent(event)
-      pointer.strength = 1.6
     },
     { passive: true },
   )
@@ -596,10 +592,10 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
     'pointerdown',
     (event) => {
       updatePointerFromEvent(event)
-      pointer.strength = 2.4
+      pointer.strength = reducedMotion ? 0.75 : 1.35
       burst.x = pointer.x
       burst.y = pointer.y
-      burst.strength = reducedMotion ? 0.9 : 1.85
+      burst.strength = reducedMotion ? 0.55 : 1.25
       burst.age = 0
       burst.seed += 1
     },
@@ -676,7 +672,7 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
     const motion = reducedMotion ? 0.28 : 1
     pointer.strength *= 0.985
     burst.age += deltaTime
-    burst.strength *= Math.exp(-deltaTime * (reducedMotion ? 3.2 : 2.45))
+    burst.strength *= Math.exp(-deltaTime * (reducedMotion ? 5.8 : 4.8))
     lastTime = seconds
 
     simUniforms.set([
