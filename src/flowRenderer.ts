@@ -1,7 +1,7 @@
 const PARTICLE_COUNT = 68000
 const WORKGROUP_SIZE = 64
 const FLOATS_PER_PARTICLE = 8
-const UNIFORM_FLOATS = 12
+const UNIFORM_FLOATS = 16
 
 const computeShader = /* wgsl */ `
 const particleCount = ${PARTICLE_COUNT}u;
@@ -22,7 +22,11 @@ struct Sim {
   motion: f32,
   pointer: vec2f,
   pointerStrength: f32,
-  padding: f32,
+  burstStrength: f32,
+  burstOrigin: vec2f,
+  burstAge: f32,
+  burstSeed: f32,
+  padding: vec4f,
 }
 
 @group(0) @binding(0) var<storage, read> sourceParticles: array<Particle>;
@@ -111,6 +115,21 @@ fn lensGravity(point: vec2f, lens: vec2f, radius: f32, mass: f32, spin: f32) -> 
   return tangent * mass * 0.58 * shell * softened + toward * mass * 0.16 * wide * softened - toward * mass * 0.28 * core;
 }
 
+fn burstFlow(point: vec2f, seed: f32) -> vec2f {
+  let toPoint = point - sim.burstOrigin;
+  let distance = max(length(toPoint), 0.001);
+  let direction = toPoint / distance;
+  let tangent = vec2f(-direction.y, direction.x);
+  let radius = 0.035 + sim.burstAge * 1.05;
+  let ringDelta = distance - radius;
+  let ring = exp(-(ringDelta * ringDelta) * 42.0);
+  let core = 1.0 - smoothstep(0.04, 0.5, distance);
+  let temporalFade = 1.0 - smoothstep(0.52, 1.36, sim.burstAge);
+  let sparkle = 0.84 + sin(seed * 0.037 + sim.burstSeed * 11.0 + sim.time * 9.0) * 0.16;
+  let strength = sim.burstStrength * temporalFade * sparkle * (ring * 1.18 + core * 0.38);
+  return direction * strength * 0.54 + tangent * strength * 0.78;
+}
+
 @compute @workgroup_size(${WORKGROUP_SIZE})
 fn computeMain(@builtin(global_invocation_id) globalId: vec3u) {
   if (globalId.x >= particleCount) {
@@ -181,9 +200,10 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u) {
   let pointerTangent = vec2f(-pointerToward.y, pointerToward.x);
   let pointerFalloff = (1.0 - smoothstep(0.02, 0.78, pointerDistance)) * sim.pointerStrength;
   let pointerDeflection = pointerTangent * pointerFalloff * 0.42 + pointerToward * pointerFalloff * 0.18;
+  let burstDeflection = burstFlow(position, particle.seed);
 
-  let targetVelocity = river + vortexField + saddle + lensField + pointerDeflection;
-  let response = 0.03 + particle.depth * 0.048 + pointerFalloff * 0.05;
+  let targetVelocity = river + vortexField + saddle + lensField + pointerDeflection + burstDeflection;
+  let response = 0.03 + particle.depth * 0.048 + pointerFalloff * 0.05 + min(sim.burstStrength, 1.0) * 0.035;
   particle.velocity = mix(particle.velocity, targetVelocity, response);
   particle.position = particle.position + particle.velocity * deltaTime * sim.motion * (0.5 + particle.depth * 0.5);
   particle.age = particle.age + deltaTime * (0.68 + particle.depth * 0.34);
@@ -215,6 +235,9 @@ struct Render {
   pointer: vec2f,
   pointerStrength: f32,
   fieldGain: f32,
+  burstOrigin: vec2f,
+  burstStrength: f32,
+  burstAge: f32,
   padding: vec2f,
 }
 
@@ -285,6 +308,22 @@ fn rightSideMask(position: vec2f) -> f32 {
   return horizontal * vertical;
 }
 
+fn burstWake(point: vec2f, seed: f32) -> f32 {
+  let distance = length(point - render.burstOrigin);
+  let radius = 0.045 + render.burstAge * 1.08;
+  let ringDelta = distance - radius;
+  let ring = exp(-(ringDelta * ringDelta) * 54.0);
+  let core = 1.0 - smoothstep(0.03, 0.48, distance);
+  let temporalFade = 1.0 - smoothstep(0.56, 1.42, render.burstAge);
+  let shimmer = 0.86 + sin(seed * 0.021 + render.time * 12.0) * 0.14;
+  return render.burstStrength * temporalFade * shimmer * (ring * 1.12 + core * 0.32);
+}
+
+fn burstColor(seed: f32) -> vec3f {
+  let phase = 0.5 + sin(seed * 0.019 + render.burstAge * 11.0) * 0.5;
+  return mix(vec3f(0.98, 0.52, 0.17), vec3f(0.32, 0.84, 0.98), phase);
+}
+
 @vertex
 fn lineVertex(
   @builtin(vertex_index) vertexIndex: u32,
@@ -299,13 +338,14 @@ fn lineVertex(
   let ndcPixel = vec2f(2.0 / render.viewport.x, 2.0 / render.viewport.y);
   let normal = vec2f(screenNormal.x * ndcPixel.x, screenNormal.y * ndcPixel.y);
   let pointerWake = (1.0 - smoothstep(0.035, 0.5, length(particle.position - render.pointer))) * render.pointerStrength;
-  let trail = 0.012 + speed * 0.056 + particle.depth * 0.018 + pointerWake * 0.045;
+  let burst = burstWake(particle.position, particle.seed);
+  let trail = 0.012 + speed * 0.056 + particle.depth * 0.018 + pointerWake * 0.045 + burst * 0.06;
   let head = particle.position;
   let tail = head - direction * trail;
   let center = mix(tail, head, corner.x);
   let focusBand = 1.0 - abs(particle.depth - 0.56) * 1.7;
   let blur = smoothstep(0.82, 1.0, particle.depth) + smoothstep(0.08, 0.0, particle.depth);
-  let widthPixels = 0.24 + clamp(focusBand, 0.0, 1.0) * 0.38 + blur * 0.48 + speed * 2.35 + pointerWake * 0.95;
+  let widthPixels = 0.24 + clamp(focusBand, 0.0, 1.0) * 0.38 + blur * 0.48 + speed * 2.35 + pointerWake * 0.95 + burst * 1.65;
   let position = center + normal * corner.y * widthPixels;
   let mask = rightSideMask(particle.position);
   let energy = fieldEnergy(particle.position, render.time);
@@ -316,7 +356,8 @@ fn lineVertex(
   out.local = corner;
   out.color = mix(vec3f(0.62, 0.67, 0.7), vec3f(0.18, 0.19, 0.2), particle.depth);
   out.color = mix(out.color, vec3f(0.48, 0.76, 0.94), max(glint, pointerWake * 0.55));
-  out.alpha = render.opacity * mask * lifeFade(particle) * (0.015 + energy * 0.041 + (1.0 - particle.depth) * 0.008 + glint * 0.062 + pointerWake * 0.062);
+  out.color = mix(out.color, burstColor(particle.seed), clamp(burst * 0.82, 0.0, 1.0));
+  out.alpha = render.opacity * mask * lifeFade(particle) * (0.015 + energy * 0.041 + (1.0 - particle.depth) * 0.008 + glint * 0.062 + pointerWake * 0.062 + burst * 0.092);
   return out;
 }
 
@@ -342,8 +383,9 @@ fn spriteVertex(
   let glint = step(0.982, hash11(particle.seed * 41.83));
   let energy = fieldEnergy(particle.position, render.time);
   let pointerWake = (1.0 - smoothstep(0.02, 0.43, length(particle.position - render.pointer))) * render.pointerStrength;
+  let burst = burstWake(particle.position, particle.seed);
   let pulse = 0.92 + sin(render.time * 1.8 + particle.seed * 0.031) * 0.08;
-  let radiusPixels = (0.42 + marker * (1.55 + energy * 1.45) + node * 0.8 + glint * 3.6 + pointerWake * 2.4) * pulse;
+  let radiusPixels = (0.42 + marker * (1.55 + energy * 1.45) + node * 0.8 + glint * 3.6 + pointerWake * 2.4 + burst * 4.2) * pulse;
   let position = particle.position + corner * ndcPixel * radiusPixels;
   let mask = rightSideMask(particle.position);
 
@@ -351,7 +393,8 @@ fn spriteVertex(
   out.position = vec4f(position, 0.0, 1.0);
   out.local = corner;
   out.color = mix(vec3f(0.035, 0.038, 0.041), vec3f(0.46, 0.76, 0.94), max(glint, pointerWake * 0.52));
-  out.alpha = render.opacity * mask * lifeFade(particle) * (marker * (0.12 + energy * 0.17) + node * 0.05 + glint * 0.3 + pointerWake * 0.24);
+  out.color = mix(out.color, burstColor(particle.seed + 17.0), clamp(burst * 0.95, 0.0, 1.0));
+  out.alpha = render.opacity * mask * lifeFade(particle) * (marker * (0.12 + energy * 0.17) + node * 0.05 + glint * 0.3 + pointerWake * 0.24 + burst * 0.34);
   return out;
 }
 
@@ -371,6 +414,12 @@ struct Render {
   opacity: f32,
   pixelRatio: f32,
   viewport: vec2f,
+  pointer: vec2f,
+  pointerStrength: f32,
+  fieldGain: f32,
+  burstOrigin: vec2f,
+  burstStrength: f32,
+  burstAge: f32,
   padding: vec2f,
 }
 
@@ -381,6 +430,7 @@ struct VertexOut {
 
 @group(0) @binding(0) var postSampler: sampler;
 @group(0) @binding(1) var sceneTexture: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> render: Render;
 @vertex
 fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOut {
   let positions = array<vec2f, 3>(
@@ -399,8 +449,19 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOut {
 @fragment
 fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
   let center = textureSample(sceneTexture, postSampler, input.uv);
-  let alpha = clamp(center.a, 0.0, 0.92);
-  let color = min(center.rgb, vec3f(alpha));
+  let point = input.uv * 2.0 - vec2f(1.0);
+  let distance = length(point - render.burstOrigin);
+  let radius = 0.055 + render.burstAge * 1.12;
+  let ringDelta = distance - radius;
+  let ring = exp(-(ringDelta * ringDelta) * 96.0);
+  let outer = exp(-(ringDelta * ringDelta) * 24.0);
+  let core = 1.0 - smoothstep(0.035, 0.24, distance);
+  let temporalFade = 1.0 - smoothstep(0.64, 1.5, render.burstAge);
+  let ripple = 0.82 + sin(ringDelta * 72.0 - render.time * 9.0) * 0.18;
+  let burstAlpha = render.burstStrength * temporalFade * ripple * (ring * 0.18 + outer * 0.045 + core * 0.035);
+  let burstColor = mix(vec3f(0.98, 0.5, 0.14), vec3f(0.28, 0.82, 1.0), smoothstep(0.05, 0.72, render.burstAge));
+  let alpha = clamp(center.a + burstAlpha, 0.0, 0.92);
+  let color = min(center.rgb + burstColor * burstAlpha, vec3f(alpha));
   return vec4f(color, alpha);
 }
 `
@@ -409,6 +470,14 @@ interface PointerState {
   x: number
   y: number
   strength: number
+}
+
+interface BurstState {
+  x: number
+  y: number
+  strength: number
+  age: number
+  seed: number
 }
 
 export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise<void> {
@@ -507,6 +576,7 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
   })
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   const pointer: PointerState = { x: 2, y: 2, strength: 0 }
+  const burst: BurstState = { x: 2, y: 2, strength: 0, age: 10, seed: 0 }
   const simUniforms = new Float32Array(UNIFORM_FLOATS)
   const renderUniforms = new Float32Array(UNIFORM_FLOATS)
   let offscreenTexture: GPUTexture | null = null
@@ -517,10 +587,21 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
   canvas.addEventListener(
     'pointermove',
     (event) => {
-      const rect = canvas.getBoundingClientRect()
-      pointer.x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1
-      pointer.y = (1 - (event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1
+      updatePointerFromEvent(event)
       pointer.strength = 1.6
+    },
+    { passive: true },
+  )
+  canvas.addEventListener(
+    'pointerdown',
+    (event) => {
+      updatePointerFromEvent(event)
+      pointer.strength = 2.4
+      burst.x = pointer.x
+      burst.y = pointer.y
+      burst.strength = reducedMotion ? 0.9 : 1.85
+      burst.age = 0
+      burst.seed += 1
     },
     { passive: true },
   )
@@ -531,6 +612,12 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
     },
     { passive: true },
   )
+
+  function updatePointerFromEvent(event: PointerEvent): void {
+    const rect = canvas.getBoundingClientRect()
+    pointer.x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1
+    pointer.y = (1 - (event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1
+  }
 
   function refreshTargets(): void {
     if (!resizeCanvas(canvas) && offscreenTexture && postBindGroup) {
@@ -565,6 +652,12 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
           binding: 1,
           resource: offscreenTexture.createView(),
         },
+        {
+          binding: 2,
+          resource: {
+            buffer: renderBuffer,
+          },
+        },
       ],
     })
   }
@@ -582,9 +675,28 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
     const aspect = canvas.width / Math.max(1, canvas.height)
     const motion = reducedMotion ? 0.28 : 1
     pointer.strength *= 0.985
+    burst.age += deltaTime
+    burst.strength *= Math.exp(-deltaTime * (reducedMotion ? 3.2 : 2.45))
     lastTime = seconds
 
-    simUniforms.set([deltaTime, seconds, aspect, motion, pointer.x, pointer.y, pointer.strength, 0])
+    simUniforms.set([
+      deltaTime,
+      seconds,
+      aspect,
+      motion,
+      pointer.x,
+      pointer.y,
+      pointer.strength,
+      burst.strength,
+      burst.x,
+      burst.y,
+      burst.age,
+      burst.seed,
+      0,
+      0,
+      0,
+      0,
+    ])
     renderUniforms.set([
       seconds,
       aspect,
@@ -596,6 +708,10 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
       pointer.y,
       pointer.strength,
       1,
+      burst.x,
+      burst.y,
+      burst.strength,
+      burst.age,
       0,
       0,
     ])
