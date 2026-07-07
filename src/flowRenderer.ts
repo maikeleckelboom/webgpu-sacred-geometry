@@ -8,20 +8,20 @@ const BLOOM_PASS_COUNT = 1 + (BLOOM_LEVEL_COUNT - 1) + BLOOM_LEVEL_COUNT;
 const TRAIL_DECAY = 0.946;
 
 const FLOW_HDR_TUNING = {
-  exposure: 1.15,
-  bloomThreshold: 1.05,
-  bloomKnee: 0.6,
-  bloomStrength: 1.34,
-  bloomSmallWeight: 0.74,
-  bloomMediumWeight: 0.46,
-  bloomLargeWeight: 0.13,
-  bloomUpsampleWeight: 0.72,
-  backgroundFloor: 0.006,
-  subtleFieldLine: 0.07,
-  normalThreadGain: 0.56,
-  brightGlowGain: 2.8,
-  particleEmissiveGain: 12.0,
-  hotspotGain: 24.0,
+  exposure: 1.33,
+  bloomThreshold: 0.82,
+  bloomKnee: 0.68,
+  bloomStrength: 1.72,
+  bloomSmallWeight: 1.16,
+  bloomMediumWeight: 0.74,
+  bloomLargeWeight: 0.1,
+  bloomUpsampleWeight: 0.82,
+  backgroundFloor: 0.012,
+  subtleFieldLine: 0.135,
+  normalThreadGain: 0.8,
+  brightGlowGain: 3.7,
+  particleEmissiveGain: 17.5,
+  hotspotGain: 32.0,
 } as const;
 
 export type FieldMode = "flow" | "mandala" | "topo" | "arch" | "waves";
@@ -374,7 +374,7 @@ fn sceneMask(position: vec2f) -> f32 {
 fn readabilityBasin(position: vec2f) -> f32 {
   let left = 1.0 - smoothstep(-0.68, 0.14, position.x);
   let vertical = smoothstep(-1.08, -0.74, position.y) * (1.0 - smoothstep(0.72, 1.1, position.y));
-  return mix(1.0, 0.68, left * vertical);
+  return mix(1.0, 0.74, left * vertical);
 }
 
 fn gravityWellEdge(position: vec2f, time: f32) -> f32 {
@@ -385,7 +385,19 @@ fn gravityWellEdge(position: vec2f, time: f32) -> f32 {
   let ring1 = 1.0 - smoothstep(0.0, 0.07, abs(d1 - 0.24));
   let ring2 = 1.0 - smoothstep(0.0, 0.06, abs(d2 - 0.2));
   let rightBias = smoothstep(-0.18, 0.58, position.x);
-  return max(ring1 * 0.82, ring2) * rightBias;
+  return max(ring1 * 0.66, ring2 * 1.18) * rightBias;
+}
+
+fn heroEnergyBody(position: vec2f, time: f32) -> f32 {
+  let c1 = vec2f(0.24 + sin(time * 0.08) * 0.08, -0.04 + cos(time * 0.10) * 0.06);
+  let c2 = vec2f(0.78 + cos(time * 0.12) * 0.06, 0.34 + sin(time * 0.09) * 0.05);
+  let d1 = position - c1;
+  let d2 = position - c2;
+  let shoulder1 = exp(-dot(d1, d1) * 7.2) * 0.24;
+  let shoulder2 = exp(-dot(d2, d2) * 8.2) * 0.92;
+  let ring2 = 1.0 - smoothstep(0.0, 0.12, abs(length(d2) - 0.24));
+  let striation = 0.62 + 0.38 * smoothstep(0.0, 1.0, sin(position.y * 18.0 - time * 0.34) * 0.5 + 0.5);
+  return (shoulder1 + shoulder2 + ring2 * 0.32) * smoothstep(-0.02, 0.68, position.x) * striation;
 }
 
 fn fieldColor(particle: Particle) -> vec3f {
@@ -441,29 +453,30 @@ fn lineVertex(
   let position = center + normal * corner.y * widthPixels;
   let mask = sceneMask(particle.position);
   let basin = readabilityBasin(particle.position);
-  let filamentSeed = step(0.975, hash11(particle.seed * 23.71));
-  let glintSeed = step(0.988, hash11(particle.seed * 41.83));
+  let filamentSeed = step(0.968, hash11(particle.seed * 23.71));
+  let glintSeed = step(0.984, hash11(particle.seed * 41.83));
   let hotspotSeed = step(0.9978, hash11(particle.seed * 67.11));
   let glintSlow = 0.26 + 0.74 * smoothstep(0.0, 1.0, sin(render.time * 0.55 + particle.seed * 0.14) * 0.5 + 0.5);
   let glintShimmer = glintSeed * smoothstep(0.0, 1.0, sin(render.time * 4.2 + particle.seed * 2.7 + particle.position.x * 4.1) * 0.5 + 0.5) * glintSlow;
   let edgeBand = gravityWellEdge(particle.position, render.time);
-  let edgeFilamentSeed = step(0.58, hash11(particle.seed * 31.17));
+  let heroBody = heroEnergyBody(particle.position, render.time);
+  let edgeFilamentSeed = step(0.46, hash11(particle.seed * 31.17));
   let edgeFilament = edgeBand * edgeFilamentSeed * max(curlHot, speedHot * 0.85);
   let edgeHotspot = hotspotSeed * edgeBand * max(curlHot, speedHot * 0.85);
-  let brightFilament = max(filamentSeed * energyHot * max(curlHot, speedHot * 0.7), edgeFilament * 0.92);
+  let brightFilament = max(filamentSeed * energyHot * max(curlHot, speedHot * 0.7), edgeFilament * 1.05);
   let headShimmer = 0.82 + 0.18 * smoothstep(0.0, 1.0, sin(render.time * 0.7 + particle.seed * 0.21) * 0.5 + 0.5);
   let baseColor = fieldColor(particle);
   let emissiveTint = mix(baseColor * 1.12, vec3f(0.86, 1.0, 0.96), edgeHotspot * 0.62 + brightFilament * 0.18);
-  let bodyGain = NORMAL_THREAD_GAIN + speedHot * 0.2 + brightFilament * BRIGHT_GLOW_GAIN * 0.18;
-  let emissiveGain = brightFilament * PARTICLE_EMISSIVE_GAIN + glintShimmer * 3.6 + edgeHotspot * HOTSPOT_GAIN;
+  let bodyGain = NORMAL_THREAD_GAIN + speedHot * 0.26 + heroBody * 0.34 + brightFilament * BRIGHT_GLOW_GAIN * 0.24;
+  let emissiveGain = brightFilament * PARTICLE_EMISSIVE_GAIN + glintShimmer * 5.4 + edgeHotspot * HOTSPOT_GAIN;
 
   var out: VertexOut;
   out.position = vec4f(position, 0.0, 1.0);
   out.local = corner;
   out.bodyColor = baseColor * bodyGain;
   out.emissiveColor = emissiveTint * emissiveGain;
-  let bodyAlpha = 0.035 + speed * 0.35 + curlHot * 0.1 + energyHot * 0.078 + brightFilament * 0.05 + pointerWake * 0.11;
-  let emissiveAlpha = brightFilament * 0.085 + glintShimmer * 0.11 + edgeHotspot * 0.25 + pointerWake * 0.026;
+  let bodyAlpha = 0.05 + speed * 0.44 + curlHot * 0.13 + energyHot * 0.1 + heroBody * 0.065 + brightFilament * 0.064 + pointerWake * 0.11;
+  let emissiveAlpha = brightFilament * 0.125 + glintShimmer * 0.17 + edgeHotspot * 0.34 + pointerWake * 0.026;
   out.bodyAlpha = render.opacity * mask * basin * lifeFade(particle) * headShimmer * bodyAlpha;
   out.emissiveAlpha = render.opacity * mask * basin * lifeFade(particle) * emissiveAlpha;
   return out;
@@ -501,8 +514,8 @@ fn spriteVertex(
   let ndcPixel = vec2f(2.0 / render.viewport.x, 2.0 / render.viewport.y);
   let marker = smoothstep(0.95, 0.999, hash11(particle.seed * 17.17));
   let node = step(0.99945, hash11(particle.seed * 29.17));
-  let glint = step(0.985, hash11(particle.seed * 41.83));
-  let hotspotSeed = step(0.9974, hash11(particle.seed * 83.19));
+  let glint = step(0.982, hash11(particle.seed * 41.83));
+  let hotspotSeed = step(0.9972, hash11(particle.seed * 83.19));
   let toPointer = particle.position - render.pointer;
   let pointerDistance = length(vec2f(toPointer.x * render.aspect, toPointer.y));
   let pointerWake = (1.0 - smoothstep(0.02, 0.43, pointerDistance)) * render.pointerStrength;
@@ -515,9 +528,10 @@ fn spriteVertex(
   let curlHot = smoothstep(0.006, 0.032, abs(particle.mCurl));
   let speedHot = smoothstep(0.016, 0.13, particle.mSpeed);
   let edgeBand = gravityWellEdge(particle.position, render.time);
-  let edgeSpark = edgeBand * step(0.987, hash11(particle.seed * 53.97)) * max(curlHot, speedHot * 0.85);
+  let heroBody = heroEnergyBody(particle.position, render.time);
+  let edgeSpark = edgeBand * step(0.978, hash11(particle.seed * 53.97)) * max(curlHot, speedHot * 0.85);
   let edgeHotspot = hotspotSeed * edgeBand * max(curlHot, speedHot * 0.85);
-  let radiusPixels = (0.5 + marker * (1.2 + particle.mSpeed * 1.6 + curlHot * 1.2) + node * 0.85 + glint * 2.6 + edgeSpark * 2.2 + edgeHotspot * 3.2 + pointerWake * 2.6) * shimmerPulse;
+  let radiusPixels = (0.52 + marker * (1.3 + particle.mSpeed * 1.7 + curlHot * 1.24) + node * 0.85 + glint * 2.7 + edgeSpark * 2.3 + edgeHotspot * 3.15 + heroBody * 0.48 + pointerWake * 2.6) * shimmerPulse;
   let position = particle.position + corner * ndcPixel * radiusPixels;
   let mask = sceneMask(particle.position);
   let basin = readabilityBasin(particle.position);
@@ -527,11 +541,11 @@ fn spriteVertex(
   var out: VertexOut;
   out.position = vec4f(position, 0.0, 1.0);
   out.local = corner;
-  out.bodyColor = baseColor * (NORMAL_THREAD_GAIN * 0.82 + marker * 0.26 + directSpark * 0.32);
+  out.bodyColor = baseColor * (NORMAL_THREAD_GAIN * 0.9 + marker * 0.3 + directSpark * 0.38 + heroBody * 0.16);
   out.emissiveColor = mix(baseColor * 1.18, vec3f(0.9, 1.0, 0.98), edgeHotspot * 0.78 + directSpark * 0.24)
     * (directSpark * PARTICLE_EMISSIVE_GAIN + edgeHotspot * HOTSPOT_GAIN);
-  out.bodyAlpha = render.opacity * mask * basin * lifeFade(particle) * (marker * (0.074 + particle.mSpeed * 0.2 + curlHot * 0.06) + nodeTwinkle * 0.06 + pointerWake * 0.11);
-  out.emissiveAlpha = render.opacity * mask * basin * lifeFade(particle) * (glintShimmer * 0.22 + nodeTwinkle * 0.1 + edgeHotspot * 0.46 + pointerWake * 0.035);
+  out.bodyAlpha = render.opacity * mask * basin * lifeFade(particle) * (marker * (0.09 + particle.mSpeed * 0.25 + curlHot * 0.072) + heroBody * 0.024 + nodeTwinkle * 0.068 + pointerWake * 0.11);
+  out.emissiveAlpha = render.opacity * mask * basin * lifeFade(particle) * (glintShimmer * 0.34 + nodeTwinkle * 0.14 + edgeHotspot * 0.58 + pointerWake * 0.035);
   return out;
 }
 
@@ -813,9 +827,21 @@ fn skyColor(uv: vec2f, time: f32) -> vec3f {
 }
 
 fn readabilityBasin(uv: vec2f) -> f32 {
-  let left = 1.0 - smoothstep(0.18, 0.62, uv.x);
+  let left = 1.0 - smoothstep(0.14, 0.5, uv.x);
   let middle = smoothstep(0.06, 0.18, uv.y) * (1.0 - smoothstep(0.86, 1.0, uv.y));
   return left * middle;
+}
+
+fn heroEventBody(uv: vec2f, time: f32, aspect: f32) -> f32 {
+  let position = uv * 2.0 - vec2f(1.0);
+  let c2 = vec2f(0.78 + cos(time * 0.12) * 0.06, 0.34 + sin(time * 0.09) * 0.05);
+  let d = vec2f((position.x - c2.x) * aspect, position.y - c2.y);
+  let radius = length(d);
+  let shoulder = exp(-dot(d, d) * 3.8);
+  let core = exp(-dot(d, d) * 17.0);
+  let edge = 1.0 - smoothstep(0.0, 0.09, abs(radius - 0.24));
+  let striation = 0.58 + 0.42 * smoothstep(0.0, 1.0, sin(position.y * 22.0 - time * 0.38) * 0.5 + 0.5);
+  return (shoulder * 0.52 + core * 0.22 + edge * 0.38) * smoothstep(0.54, 0.92, uv.x) * striation;
 }
 
 fn toneMapFilmic(color: vec3f) -> vec3f {
@@ -839,8 +865,9 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
   let r1 = ridge(input.uv, render.time);
   let r2 = ridge2(input.uv * vec2f(1.0, 1.1) + vec2f(13.7, 7.1), render.time);
   let sceneMag = length(scene + emissive * 0.35);
-  let causticMask = smoothstep(0.12, 0.74, sceneMag);
-  let causticColor = vec3f(0.18, 0.72, 0.88) * r1 * 0.055 + vec3f(0.18, 0.34, 0.78) * r2 * 0.035;
+  let heroBody = heroEventBody(input.uv, render.time, render.aspect);
+  let causticMask = max(smoothstep(0.055, 0.48, sceneMag), heroBody * 0.58);
+  let causticColor = vec3f(0.18, 0.72, 0.88) * r1 * 0.074 + vec3f(0.18, 0.34, 0.78) * r2 * 0.048;
   let caustic = causticColor * causticMask;
 
   let pointerNdc = input.uv * 2.0 - vec2f(1.0, 1.0);
@@ -856,10 +883,13 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
   let bloomTint = mix(vec3f(0.82, 1.0, 0.98), vec3f(0.74, 1.0, 0.92), p3);
   let sceneLight = scene * 1.18 + emissive * 0.98 + bloomLit * bloomTint * bloomPulse;
   let pointerColor = (vec3f(0.24, 0.72, 0.88) * pointerHalo + vec3f(0.7, 0.98, 0.92) * pointerCore) * render.pointerStrength * 0.12;
-  var color = skyColor(input.uv, render.time) + sceneLight + caustic + pointerColor;
+  let fieldVeilWeight = (0.26 + 0.74 * smoothstep(0.16, 0.94, input.uv.x)) * smoothstep(0.04, 0.82, input.uv.y);
+  let fieldVeil = (vec3f(0.08, 0.44, 0.56) * r1 * 0.046 + vec3f(0.1, 0.22, 0.62) * r2 * 0.032) * SUBTLE_FIELD_LINE * fieldVeilWeight;
+  let heroHalo = vec3f(0.08, 0.42, 0.52) * heroBody * (0.06 + r1 * 0.07);
+  var color = skyColor(input.uv, render.time) + sceneLight + caustic + fieldVeil + heroHalo + pointerColor;
 
   let basin = readabilityBasin(input.uv);
-  color = mix(color, color * 0.68 + vec3f(0.004, 0.007, 0.01), basin * 0.38);
+  color = mix(color, color * 0.74 + vec3f(0.005, 0.008, 0.012), basin * 0.3);
 
   let toneMapped = toneMapFilmic(color);
   return vec4f(toneMapped, 1.0);
