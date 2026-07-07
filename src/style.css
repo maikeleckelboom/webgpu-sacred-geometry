@@ -365,13 +365,19 @@ body.aurora-page-body .lab-header {
   --study-status-bg: rgba(2, 5, 8, 0.92);
   --study-status-border: rgba(120, 255, 196, 0.32);
   --study-scrim:
+    radial-gradient(
+      ellipse at 18% 48%,
+      rgba(2, 3, 5, 0.38) 0%,
+      rgba(2, 3, 5, 0.2) 34%,
+      transparent 62%
+    ),
     linear-gradient(
       90deg,
-      rgba(2, 3, 5, 0.98) 0%,
-      rgba(2, 3, 5, 0.84) 30%,
-      rgba(2, 3, 5, 0.34) 52%,
-      rgba(2, 3, 5, 0.06) 72%,
-      transparent 88%
+      rgba(2, 3, 5, 0.74) 0%,
+      rgba(2, 3, 5, 0.54) 32%,
+      rgba(2, 3, 5, 0.2) 54%,
+      rgba(2, 3, 5, 0.04) 74%,
+      transparent 90%
     ),
     linear-gradient(180deg, rgba(2, 3, 5, 0.44) 0%, transparent 30%, rgba(2, 3, 5, 0.28) 100%);
   --study-vignette:
@@ -606,6 +612,12 @@ body.aurora-page-body .lab-header {
 
   .study-page--flow::before {
     background:
+      radial-gradient(
+        ellipse at 26% 38%,
+        rgba(2, 3, 5, 0.38) 0%,
+        rgba(2, 3, 5, 0.24) 42%,
+        transparent 78%
+      ),
       linear-gradient(
         180deg,
         rgba(2, 3, 5, 0.98) 0%,
@@ -674,6 +686,28 @@ body.aurora-page-body .lab-header {
 
   .aurora-canvas {
     mask-image: none;
+  }
+}
+
+@media (color-gamut: p3) {
+  body.flow-page-body .lab-header {
+    --lab-active: color(display-p3 0.5 1 0.74);
+    --lab-border: color(display-p3 0.4 1 0.76 / 0.22);
+    --lab-muted: color(display-p3 0.84 0.96 0.9 / 0.7);
+    --lab-text: color(display-p3 0.96 1 0.98);
+  }
+
+  .study-page--flow {
+    --study-bg: color(display-p3 0.006 0.009 0.014);
+    --study-kicker: color(display-p3 0.5 1 0.74 / 0.84);
+    --study-primary-bg: color(display-p3 0.76 1 0.86);
+    --study-primary-text: color(display-p3 0.012 0.07 0.045);
+    --study-secondary-border: color(display-p3 0.4 1 0.78 / 0.38);
+    --study-status-border: color(display-p3 0.38 1 0.78 / 0.34);
+  }
+
+  .flow-canvas {
+    background: color(display-p3 0.006 0.009 0.014);
   }
 }
 
