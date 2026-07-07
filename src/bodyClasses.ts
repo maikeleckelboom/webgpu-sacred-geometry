@@ -3,6 +3,7 @@ const pageBodyClasses = [
   'flow-page-body',
   'topography-page-body',
   'architecture-page-body',
+  'waves-page-body',
 ]
 
 export function setPageBodyClass(activeClass: string): void {

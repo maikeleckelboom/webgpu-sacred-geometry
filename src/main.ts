@@ -5,6 +5,7 @@ import { mountFlowFieldPage } from './flowPage'
 import { startMandalaRenderer } from './renderer'
 import { createLabHeader } from './navigation'
 import { mountTopographyPage } from './topographyPage'
+import { mountWavesPage } from './wavesPage'
 
 const app = document.querySelector<HTMLDivElement>('#app')
 
@@ -20,6 +21,8 @@ if (pathname === '/flow-field') {
   mountTopographyPage(app)
 } else if (pathname === '/architecture') {
   mountArchitecturePage(app)
+} else if (pathname === '/waves') {
+  mountWavesPage(app)
 } else {
   mountMandalaPage(app)
 }
