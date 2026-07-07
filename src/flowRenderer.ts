@@ -1,10 +1,23 @@
 const PARTICLE_COUNT = 72000
 const WORKGROUP_SIZE = 64
-const FLOATS_PER_PARTICLE = 8
-const UNIFORM_FLOATS = 12
+const FLOATS_PER_PARTICLE = 12
+const UNIFORM_FLOATS = 14
+const TRAIL_DECAY = 0.965
+
+export type FieldMode = 'flow' | 'mandala' | 'topo' | 'arch' | 'waves'
+
+const MODE_INDEX: Record<FieldMode, number> = {
+  flow: 0,
+  mandala: 1,
+  topo: 2,
+  arch: 3,
+  waves: 4,
+}
 
 const computeShader = /* wgsl */ `
 const particleCount = ${PARTICLE_COUNT}u;
+const GOLDEN_ANGLE = 2.39996322972865332;
+const FIELD_EPS = 0.045;
 
 struct Particle {
   position: vec2f,
@@ -13,6 +26,10 @@ struct Particle {
   depth: f32,
   age: f32,
   lane: f32,
+  mSpeed: f32,
+  mCurl: f32,
+  mDiv: f32,
+  mEnergy: f32,
 }
 
 struct Sim {
@@ -22,6 +39,11 @@ struct Sim {
   motion: f32,
   pointer: vec2f,
   pointerStrength: f32,
+  modeFlow: f32,
+  modeMandala: f32,
+  modeTopo: f32,
+  modeArch: f32,
+  modeWaves: f32,
   padding: f32,
 }
 
@@ -29,8 +51,172 @@ struct Sim {
 @group(0) @binding(1) var<storage, read_write> targetParticles: array<Particle>;
 @group(0) @binding(2) var<uniform> sim: Sim;
 
+// === Noise primitives ===
 fn hash11(value: f32) -> f32 {
   return fract(sin(value * 127.1) * 43758.5453123);
+}
+
+fn hash22(point: vec2f) -> vec2f {
+  let q = vec2f(dot(point, vec2f(127.1, 311.7)), dot(point, vec2f(269.5, 183.3)));
+  return -1.0 + 2.0 * fract(sin(q) * 43758.5453);
+}
+
+fn snoise(point: vec2f) -> f32 {
+  let K1 = 0.366025404;
+  let K2 = 0.211324865;
+  let i = floor(point + (point.x + point.y) * K1);
+  let a = point - i + (i.x + i.y) * K2;
+  let o = step(a.yx, a.xy);
+  let b = a - o + K2;
+  let c = a - 1.0 + 2.0 * K2;
+  let h = max(0.5 - vec3f(dot(a, a), dot(b, b), dot(c, c)), vec3f(0.0));
+  let n = h * h * h * h * vec3f(
+    dot(a, hash22(i)),
+    dot(b, hash22(i + o)),
+    dot(c, hash22(i + vec2f(1.0))),
+  );
+  return dot(n, vec3f(70.0, 70.0, 70.0));
+}
+
+fn fbm(point: vec2f) -> f32 {
+  var total = 0.0;
+  var amp = 0.5;
+  var p = point;
+  for (var i = 0u; i < 4u; i = i + 1u) {
+    total += snoise(p) * amp;
+    p = p * 2.03 + vec2f(1.7, -3.1);
+    amp *= 0.5;
+  }
+  return total;
+}
+
+fn curlNoise2D(point: vec2f, time: f32) -> vec2f {
+  let pT = point + vec2f(time * 0.08, -time * 0.06);
+  let eps = 0.08;
+  let n1 = snoise(pT + vec2f(0.0, eps));
+  let n2 = snoise(pT - vec2f(0.0, eps));
+  let n3 = snoise(pT + vec2f(eps, 0.0));
+  let n4 = snoise(pT - vec2f(eps, 0.0));
+  return vec2f((n1 - n2), -(n3 - n4)) / (2.0 * eps);
+}
+
+// === Atomic field components ===
+fn vortex(point: vec2f, center: vec2f, strength: f32) -> vec2f {
+  let d = point - center;
+  let r2 = dot(d, d) + 0.0009;
+  return strength * vec2f(-d.y, d.x) / r2;
+}
+
+fn goldenLattice(point: vec2f, time: f32) -> vec2f {
+  var acc = vec2f(0.0);
+  for (var i = 1u; i <= 11u; i = i + 1u) {
+    let fi = f32(i);
+    let angle = fi * GOLDEN_ANGLE + time * 0.05;
+    let radius = sqrt(fi) * 0.135;
+    let c = vec2f(cos(angle), sin(angle)) * radius;
+    let d = point - c;
+    let r2 = dot(d, d) + 0.045;
+    let orbit = vec2f(-d.y, d.x) / r2 * 0.18;
+    let breathe = 0.6 + 0.4 * sin(time * 0.3 + fi * 1.7);
+    acc += orbit * breathe;
+  }
+  return acc;
+}
+
+fn auroraShear(point: vec2f, time: f32) -> vec2f {
+  let p2 = point + curlNoise2D(point * 1.7, time) * 0.18;
+  let shear = vec2f(
+    sin(p2.y * 3.0 + time * 0.2),
+    cos(p2.x * 1.5 + time * 0.1),
+  );
+  return shear * 0.12;
+}
+
+// === Field modes ===
+fn fieldModeFlow(point: vec2f, time: f32) -> vec2f {
+  let c1 = vec2f(0.36 + sin(time * 0.08) * 0.08, -0.04 + cos(time * 0.10) * 0.06);
+  let c2 = vec2f(0.86 + cos(time * 0.12) * 0.06, 0.30 + sin(time * 0.09) * 0.05);
+  let c3 = vec2f(0.20 + sin(time * 0.07) * 0.08, 0.55 + cos(time * 0.11) * 0.04);
+  var f = curlNoise2D(point * 1.3, time) * 0.22;
+  f += auroraShear(point, time);
+  f += vortex(point, c1, 0.80) * 0.012;
+  f += vortex(point, c2, -0.45) * 0.015;
+  f += vortex(point, c3, 0.30) * 0.013;
+  f += goldenLattice(point, time) * 0.55;
+  return f;
+}
+
+fn fieldModeMandala(point: vec2f, time: f32) -> vec2f {
+  let r = length(point) + 0.001;
+  let theta = atan2(point.y, point.x);
+  let pulse = 0.5 + 0.5 * sin(r * 7.5 - time * 0.45);
+  let radial = -normalize(point) * (0.045 + 0.025 * sin(time * 0.3));
+  let tangent = vec2f(-point.y, point.x) / r * 0.14 * pulse;
+  let symmetry = vec2f(
+    cos(theta * 6.0 + time * 0.2),
+    sin(theta * 6.0 + time * 0.2),
+  ) * 0.05;
+  let rings = curlNoise2D(point * 2.4, time) * 0.04;
+  return radial + tangent + symmetry + rings;
+}
+
+fn fieldModeTopography(point: vec2f, time: f32) -> vec2f {
+  let r = length(point) + 0.001;
+  let bands = sin(r * 6.0 - time * 0.3);
+  let tangent = vec2f(-point.y, point.x) / r * 0.10 * bands;
+  let drift = curlNoise2D(point * 2.0, time * 0.5) * 0.05;
+  return tangent + drift;
+}
+
+fn fieldModeArchitecture(point: vec2f, time: f32) -> vec2f {
+  let snapX = -point.x * smoothstep(0.0, 0.4, abs(point.x) - 0.05);
+  let snapY = -point.y * smoothstep(0.0, 0.4, abs(point.y) - 0.05);
+  let tangent = vec2f(-point.y, point.x) * 0.03;
+  let breathe = 0.85 + 0.15 * sin(time * 0.4);
+  return vec2f(snapX, snapY) * 0.55 * breathe + tangent;
+}
+
+fn fieldModeWaves(point: vec2f, time: f32) -> vec2f {
+  let phase = point.x * 4.0 - time * 0.6;
+  let phase2 = point.y * 3.0 + time * 0.4;
+  let wave = vec2f(cos(phase) * 0.20, sin(phase2) * 0.10);
+  let swell = curlNoise2D(point * 0.6, time) * 0.04;
+  return wave + swell;
+}
+
+fn fieldAt(point: vec2f, time: f32) -> vec2f {
+  return sim.modeFlow * fieldModeFlow(point, time)
+       + sim.modeMandala * fieldModeMandala(point, time)
+       + sim.modeTopo * fieldModeTopography(point, time)
+       + sim.modeArch * fieldModeArchitecture(point, time)
+       + sim.modeWaves * fieldModeWaves(point, time);
+}
+
+fn fieldMetricsAt(point: vec2f, time: f32) -> vec4f {
+  let eps = FIELD_EPS;
+  let fxp = fieldAt(point + vec2f(eps, 0.0), time);
+  let fxn = fieldAt(point - vec2f(eps, 0.0), time);
+  let fyp = fieldAt(point + vec2f(0.0, eps), time);
+  let fyn = fieldAt(point - vec2f(0.0, eps), time);
+  let f = fieldAt(point, time);
+  let speed = length(f);
+  let curl = (fyp.x - fyn.x - fxp.y + fxn.y) / (2.0 * eps);
+  let div = (fxp.x - fxn.x + fyp.y - fyn.y) / (2.0 * eps);
+  let energy = length(fxp - fxn) + length(fyp - fyn);
+  return vec4f(speed, curl, div, energy);
+}
+
+fn mouseField(point: vec2f) -> vec2f {
+  if (sim.pointerStrength < 0.001) {
+    return vec2f(0.0);
+  }
+  let d = sim.pointer - point;
+  let r = length(d) + 0.001;
+  let toward = d / r;
+  let tangent = vec2f(-toward.y, toward.x);
+  let falloff = (1.0 - smoothstep(0.02, 0.45, r)) * sim.pointerStrength;
+  let core = 1.0 - smoothstep(0.0, 0.08, r);
+  return tangent * falloff * 0.18 + toward * falloff * 0.04 - toward * core * sim.pointerStrength * 0.1;
 }
 
 fn spawn(seed: f32, epoch: f32) -> Particle {
@@ -49,66 +235,11 @@ fn spawn(seed: f32, epoch: f32) -> Particle {
   particle.depth = h4;
   particle.age = h5 * mix(10.0, 20.0, h4);
   particle.lane = mix(-1.0, 1.0, h6);
+  particle.mSpeed = 0.0;
+  particle.mCurl = 0.0;
+  particle.mDiv = 0.0;
+  particle.mEnergy = 0.0;
   return particle;
-}
-
-fn flowNoise(point: vec2f, lane: f32, time: f32) -> vec2f {
-  let waveA = sin((point.y + lane * 0.12) * 8.4 + point.x * 1.9 + time * 0.31);
-  let waveB = cos((point.x - lane * 0.08) * 6.7 - point.y * 1.6 - time * 0.24);
-  let waveC = sin((point.x * 3.4 - point.y * 4.1) + lane * 2.2 + time * 0.17);
-  let waveD = cos((point.x * 2.1 + point.y * 3.6) - time * 0.19);
-  return normalize(vec2f(waveA + waveC * 0.72, waveB - waveD * 0.58) + vec2f(0.001, -0.002));
-}
-
-fn basin(point: vec2f, center: vec2f, radius: f32) -> f32 {
-  return 1.0 - smoothstep(radius * 0.14, radius, length(point - center));
-}
-
-fn vortex(point: vec2f, center: vec2f, spin: f32, radius: f32, orbitStrength: f32, pullStrength: f32) -> vec2f {
-  let toCenter = center - point;
-  let distance = max(length(toCenter), 0.001);
-  let toward = toCenter / distance;
-  let tangent = vec2f(-toward.y, toward.x) * spin;
-  let outer = 1.0 - smoothstep(radius * 0.28, radius * 1.42, distance);
-  let inner = 1.0 - smoothstep(radius * 0.04, radius * 0.64, distance);
-  let shell = outer * (0.34 + inner * 0.66);
-  return tangent * orbitStrength * shell + toward * pullStrength * inner;
-}
-
-fn lensPosition(slot: u32, time: f32, pointer: vec2f, pointerStrength: f32) -> vec2f {
-  var base = vec2f(0.58, -0.28);
-  var drift = vec2f(sin(time * 0.18) * 0.035, cos(time * 0.14) * 0.026);
-
-  if (slot == 1u) {
-    base = vec2f(0.94, 0.23);
-    drift = vec2f(cos(time * 0.13) * 0.03, sin(time * 0.17) * 0.025);
-  } else if (slot == 2u) {
-    base = vec2f(1.18, -0.5);
-    drift = vec2f(sin(time * 0.1) * 0.045, cos(time * 0.12) * 0.03);
-  } else if (slot == 3u) {
-    base = vec2f(0.28, 0.49);
-    drift = vec2f(cos(time * 0.11) * 0.034, sin(time * 0.13) * 0.03);
-  } else if (slot == 4u) {
-    base = vec2f(1.25, 0.45);
-    drift = vec2f(cos(time * 0.09) * 0.025, sin(time * 0.18) * 0.024);
-  }
-
-  let moving = base + drift;
-  let toPointer = pointer - moving;
-  let pointerPull = (1.0 - smoothstep(0.04, 0.48, length(toPointer))) * pointerStrength;
-  return moving + toPointer * pointerPull * 0.08;
-}
-
-fn lensGravity(point: vec2f, lens: vec2f, radius: f32, mass: f32, spin: f32) -> vec2f {
-  let toLens = lens - point;
-  let distance = max(length(toLens), 0.001);
-  let toward = toLens / distance;
-  let tangent = vec2f(-toward.y, toward.x) * spin;
-  let shell = smoothstep(radius * 1.15, radius * 4.0, distance) * (1.0 - smoothstep(radius * 7.0, radius * 13.0, distance));
-  let wide = 1.0 - smoothstep(radius * 4.0, radius * 16.0, distance);
-  let core = 1.0 - smoothstep(radius * 0.65, radius * 2.0, distance);
-  let softened = 1.0 / (1.0 + distance * distance * 10.0);
-  return tangent * mass * 0.58 * shell * softened + toward * mass * 0.16 * wide * softened - toward * mass * 0.28 * core;
 }
 
 @compute @workgroup_size(${WORKGROUP_SIZE})
@@ -124,69 +255,26 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u) {
 
   if (
     particle.age > lifetime ||
-    particle.position.x < -1.08 ||
-    particle.position.x > 1.62 ||
-    abs(particle.position.y) > 1.3
+    particle.position.x < -1.1 ||
+    particle.position.x > 1.65 ||
+    abs(particle.position.y) > 1.32
   ) {
     particle = spawn(particle.seed, epoch);
   }
 
   let deltaTime = min(sim.deltaTime, 0.033);
   let position = particle.position;
-  let centerA = vec2f(0.34 + sin(sim.time * 0.09) * 0.045, -0.04 + cos(sim.time * 0.11) * 0.035);
-  let centerB = vec2f(0.72 + cos(sim.time * 0.13) * 0.052, 0.32 + sin(sim.time * 0.10) * 0.045);
-  let centerC = vec2f(0.78 + sin(sim.time * 0.10) * 0.048, -0.42 + cos(sim.time * 0.12) * 0.055);
-  let centerD = vec2f(1.13 + cos(sim.time * 0.08) * 0.045, 0.03 + sin(sim.time * 0.16) * 0.05);
-  let centerE = vec2f(0.05 + cos(sim.time * 0.07) * 0.045, 0.55 + sin(sim.time * 0.09) * 0.04);
-  let centerF = vec2f(0.08 + sin(sim.time * 0.06) * 0.05, -0.73 + cos(sim.time * 0.10) * 0.05);
-
-  let weightA = basin(position, centerA, 1.08);
-  let weightB = basin(position, centerB, 0.8);
-  let weightC = basin(position, centerC, 0.82);
-  let weightD = basin(position, centerD, 0.74);
-  let weightE = basin(position, centerE, 0.78);
-  let weightF = basin(position, centerF, 0.78);
-
-  let curl = flowNoise(position, particle.lane, sim.time);
-  let river = vec2f(0.12, 0.0) + curl * 0.09;
-  let vortexField =
-    vortex(position, centerA, 1.0, 1.08, 0.18, 0.032) +
-    vortex(position, centerB, -1.0, 0.8, 0.13, 0.018) +
-    vortex(position, centerC, -1.0, 0.82, 0.12, 0.02) +
-    vortex(position, centerD, 1.0, 0.74, 0.11, 0.016) +
-    vortex(position, centerE, -1.0, 0.78, 0.08, 0.012) +
-    vortex(position, centerF, 1.0, 0.78, 0.08, 0.012);
-
-  let bridgeAB = normalize(centerB - centerA + vec2f(0.001, 0.001)) * weightA * weightB * 0.07;
-  let bridgeAC = normalize(centerC - centerA + vec2f(0.001, -0.001)) * weightA * weightC * 0.06;
-  let bridgeBD = normalize(centerD - centerB + vec2f(0.001, 0.001)) * weightB * weightD * 0.05;
-  let bridgeCF = normalize(centerC - centerF + vec2f(-0.001, 0.001)) * weightC * weightF * 0.045;
-  let saddle = bridgeAB + bridgeAC + bridgeBD + bridgeCF;
-
-  let lensA = lensPosition(0u, sim.time, sim.pointer, sim.pointerStrength);
-  let lensB = lensPosition(1u, sim.time, sim.pointer, sim.pointerStrength);
-  let lensC = lensPosition(2u, sim.time, sim.pointer, sim.pointerStrength);
-  let lensD = lensPosition(3u, sim.time, sim.pointer, sim.pointerStrength);
-  let lensE = lensPosition(4u, sim.time, sim.pointer, sim.pointerStrength);
-  let lensField =
-    lensGravity(position, lensA, 0.055, 0.076, 1.0) +
-    lensGravity(position, lensB, 0.04, 0.052, -1.0) +
-    lensGravity(position, lensC, 0.07, 0.068, 1.0) +
-    lensGravity(position, lensD, 0.035, 0.046, -1.0) +
-    lensGravity(position, lensE, 0.047, 0.044, 1.0);
-
-  let toPointer = sim.pointer - position;
-  let pointerDistance = max(length(toPointer), 0.001);
-  let pointerToward = toPointer / pointerDistance;
-  let pointerTangent = vec2f(-pointerToward.y, pointerToward.x);
-  let pointerFalloff = (1.0 - smoothstep(0.02, 0.78, pointerDistance)) * sim.pointerStrength;
-  let pointerDeflection = pointerTangent * pointerFalloff * 0.42 + pointerToward * pointerFalloff * 0.18;
-
-  let targetVelocity = river + vortexField + saddle + lensField + pointerDeflection;
-  let response = 0.03 + particle.depth * 0.048 + pointerFalloff * 0.05;
-  particle.velocity = mix(particle.velocity, targetVelocity, response);
+  let fieldVelocity = fieldAt(position, sim.time) + mouseField(position);
+  let response = 0.05 + particle.depth * 0.055;
+  particle.velocity = mix(particle.velocity, fieldVelocity, response);
   particle.position = particle.position + particle.velocity * deltaTime * sim.motion * (0.5 + particle.depth * 0.5);
   particle.age = particle.age + deltaTime * (0.68 + particle.depth * 0.34);
+
+  let metrics = fieldMetricsAt(particle.position, sim.time);
+  particle.mSpeed = metrics.x;
+  particle.mCurl = metrics.y;
+  particle.mDiv = metrics.z;
+  particle.mEnergy = metrics.w;
 
   if (particle.age > lifetime) {
     particle = spawn(particle.seed, epoch + 1.0);
@@ -204,6 +292,10 @@ struct Particle {
   depth: f32,
   age: f32,
   lane: f32,
+  mSpeed: f32,
+  mCurl: f32,
+  mDiv: f32,
+  mEnergy: f32,
 }
 
 struct Render {
@@ -232,30 +324,6 @@ fn hash11(value: f32) -> f32 {
   return fract(sin(value * 127.1) * 43758.5453123);
 }
 
-fn quadCorner(vertexIndex: u32) -> vec2f {
-  let corners = array<vec2f, 6>(
-    vec2f(0.0, -1.0),
-    vec2f(1.0, -1.0),
-    vec2f(0.0, 1.0),
-    vec2f(0.0, 1.0),
-    vec2f(1.0, -1.0),
-    vec2f(1.0, 1.0),
-  );
-  return corners[vertexIndex];
-}
-
-fn spriteCorner(vertexIndex: u32) -> vec2f {
-  let corners = array<vec2f, 6>(
-    vec2f(-1.0, -1.0),
-    vec2f(1.0, -1.0),
-    vec2f(-1.0, 1.0),
-    vec2f(-1.0, 1.0),
-    vec2f(1.0, -1.0),
-    vec2f(1.0, 1.0),
-  );
-  return corners[vertexIndex];
-}
-
 fn lifeFade(particle: Particle) -> f32 {
   let lifetime = mix(10.0, 20.0, hash11(particle.seed * 3.91));
   let birth = smoothstep(0.0, 1.2, particle.age);
@@ -263,58 +331,25 @@ fn lifeFade(particle: Particle) -> f32 {
   return clamp(birth * death, 0.0, 1.0);
 }
 
-fn basin(point: vec2f, center: vec2f, radius: f32) -> f32 {
-  return 1.0 - smoothstep(radius * 0.14, radius, length(point - center));
-}
-
-fn fieldEnergy(point: vec2f, time: f32) -> f32 {
-  let centerA = vec2f(0.34 + sin(time * 0.09) * 0.045, -0.04 + cos(time * 0.11) * 0.035);
-  let centerB = vec2f(0.72 + cos(time * 0.13) * 0.052, 0.32 + sin(time * 0.10) * 0.045);
-  let centerC = vec2f(0.78 + sin(time * 0.10) * 0.048, -0.42 + cos(time * 0.12) * 0.055);
-  let centerD = vec2f(1.13 + cos(time * 0.08) * 0.045, 0.03 + sin(time * 0.16) * 0.05);
-  let centerE = vec2f(0.05 + cos(time * 0.07) * 0.045, 0.55 + sin(time * 0.09) * 0.04);
-  let centerF = vec2f(0.08 + sin(time * 0.06) * 0.05, -0.73 + cos(time * 0.10) * 0.05);
-  let primary = max(max(basin(point, centerA, 1.02), basin(point, centerB, 0.76)), max(basin(point, centerC, 0.78), basin(point, centerD, 0.7)));
-  let outer = max(basin(point, centerE, 0.78), basin(point, centerF, 0.78)) * 0.86;
-  return clamp(max(primary, outer), 0.0, 1.0);
-}
-
-fn auroraCurtain(point: vec2f, time: f32, phase: f32) -> f32 {
-  let sweep = sin(point.x * 3.2 + sin(point.y * 2.1 + phase) * 0.82 + time * 0.16 + phase);
-  let fold = sin(point.x * 11.0 + point.y * 2.7 + phase * 1.7 + time * 0.21);
-  let ridgeY = mix(-0.72, 0.72, fract(phase * 0.173)) + sweep * 0.1 + fold * 0.036;
-  let width = 0.13 + 0.035 * (0.5 + 0.5 * sin(phase + time * 0.05));
-  let band = 1.0 - smoothstep(width, width * 3.1, abs(point.y - ridgeY));
-  let columnWave = 0.5 + 0.5 * sin(point.x * 38.0 + phase * 5.2 + sin(point.y * 5.0 + time * 0.22) * 2.0);
-  let columns = 0.46 + 0.54 * columnWave * columnWave;
-  let view = smoothstep(-0.96, -0.46, point.x) * (1.0 - smoothstep(1.4, 1.66, point.x));
-  return band * columns * view;
-}
-
-fn auroraEnergy(point: vec2f, time: f32) -> f32 {
-  let high = auroraCurtain(point, time, 2.31) * 0.85;
-  let middle = auroraCurtain(point + vec2f(0.08, -0.18), time, 4.97) * 0.76;
-  let low = auroraCurtain(point + vec2f(-0.16, 0.28), time, 8.41) * 0.62;
-  return clamp(high + middle + low, 0.0, 1.0);
-}
-
-fn auroraColor(point: vec2f, depth: f32, energy: f32, time: f32, seed: f32) -> vec3f {
-  let rhythm = 0.5 + 0.5 * sin(seed * 0.013 + point.x * 5.4 + point.y * 2.1 + time * 0.18);
-  let green = vec3f(0.25, 1.0, 0.58);
-  let cyan = vec3f(0.14, 0.78, 1.0);
-  let violet = vec3f(0.82, 0.32, 1.0);
-  let gold = vec3f(1.0, 0.76, 0.34);
-  var color = mix(green, cyan, smoothstep(0.16, 0.8, rhythm));
-  color = mix(color, violet, smoothstep(0.58, 1.0, energy) * (0.24 + depth * 0.18));
-  color = mix(color, gold, smoothstep(0.94, 1.0, hash11(seed * 9.71)) * 0.5);
-  return color;
-}
-
 fn sceneMask(position: vec2f) -> f32 {
-  let horizontal = smoothstep(-1.02, -0.58, position.x) * (1.0 - smoothstep(1.46, 1.68, position.x));
-  let vertical = 1.0 - smoothstep(1.04, 1.28, abs(position.y));
-  let textRelief = mix(0.42, 1.0, smoothstep(-0.28, 0.16, position.x));
-  return horizontal * vertical * textRelief;
+  let horizontal = smoothstep(-1.04, -0.6, position.x) * (1.0 - smoothstep(1.48, 1.7, position.x));
+  let vertical = 1.0 - smoothstep(1.04, 1.3, abs(position.y));
+  return horizontal * vertical;
+}
+
+fn fieldColor(particle: Particle, time: f32) -> vec3f {
+  let curlT = clamp(particle.mCurl * 6.0, -1.0, 1.0);
+  let hue = curlT * 0.5 + 0.5;
+  let cyan = vec3f(0.16, 0.86, 1.0);
+  let violet = vec3f(0.78, 0.30, 1.0);
+  let green = vec3f(0.32, 1.0, 0.62);
+  let amber = vec3f(1.0, 0.76, 0.36);
+  var color = mix(cyan, violet, hue);
+  color = mix(color, green, smoothstep(0.6, 1.0, abs(particle.mDiv)) * 0.35);
+  color = mix(color, amber, smoothstep(0.92, 1.0, hash11(particle.seed * 9.71)) * 0.45);
+  let speedLift = clamp(particle.mSpeed * 4.0, 0.0, 1.0);
+  color = color * (0.65 + speedLift * 0.55);
+  return color;
 }
 
 @vertex
@@ -323,33 +358,43 @@ fn lineVertex(
   @builtin(instance_index) instanceIndex: u32,
 ) -> VertexOut {
   let particle = particles[instanceIndex];
-  let corner = quadCorner(vertexIndex);
-  let speed = length(particle.velocity);
+  let corners = array<vec2f, 6>(
+    vec2f(0.0, -1.0),
+    vec2f(1.0, -1.0),
+    vec2f(0.0, 1.0),
+    vec2f(0.0, 1.0),
+    vec2f(1.0, -1.0),
+    vec2f(1.0, 1.0),
+  );
+  let corner = corners[vertexIndex];
+  let speed = particle.mSpeed;
   let direction = normalize(particle.velocity + vec2f(0.0001, 0.0002));
   let screenDirection = normalize(vec2f(direction.x * render.viewport.x, direction.y * render.viewport.y));
   let screenNormal = vec2f(-screenDirection.y, screenDirection.x);
   let ndcPixel = vec2f(2.0 / render.viewport.x, 2.0 / render.viewport.y);
   let normal = vec2f(screenNormal.x * ndcPixel.x, screenNormal.y * ndcPixel.y);
-  let pointerWake = (1.0 - smoothstep(0.035, 0.5, length(particle.position - render.pointer))) * render.pointerStrength;
-  let energy = fieldEnergy(particle.position, render.time);
-  let aurora = auroraEnergy(particle.position, render.time);
-  let trail = 0.026 + speed * 0.128 + particle.depth * 0.026 + aurora * 0.038 + pointerWake * 0.07;
+  let toPointer = particle.position - render.pointer;
+  let pointerDistance = length(vec2f(toPointer.x * render.aspect, toPointer.y));
+  let pointerWake = (1.0 - smoothstep(0.035, 0.5, pointerDistance)) * render.pointerStrength;
+  let trail = 0.022 + speed * 0.20 + particle.depth * 0.025 + pointerWake * 0.08;
   let head = particle.position;
   let tail = head - direction * trail;
   let center = mix(tail, head, corner.x);
-  let focusBand = 1.0 - abs(particle.depth - 0.56) * 1.7;
-  let blur = smoothstep(0.82, 1.0, particle.depth) + smoothstep(0.08, 0.0, particle.depth);
-  let widthPixels = 0.62 + clamp(focusBand, 0.0, 1.0) * 0.72 + blur * 0.9 + speed * 4.4 + aurora * 0.82 + pointerWake * 1.45;
+  let widthPixels = 0.5 + speed * 6.0 + abs(particle.mCurl) * 80.0 + pointerWake * 1.6;
   let position = center + normal * corner.y * widthPixels;
   let mask = sceneMask(particle.position);
-  let glint = step(0.976, hash11(particle.seed * 23.71));
+  let glintSeed = step(0.978, hash11(particle.seed * 23.71));
+  let glintSlow = 0.3 + 0.7 * smoothstep(0.0, 1.0, sin(render.time * 0.55 + particle.seed * 0.14) * 0.5 + 0.5);
+  let glintShimmer = glintSeed * (0.3 + 0.7 * sin(render.time * 3.4 + particle.seed * 2.7 + particle.position.x * 4.1)) * glintSlow;
+  let headShimmer = 0.82 + 0.18 * smoothstep(0.0, 1.0, sin(render.time * 0.7 + particle.seed * 0.21) * 0.5 + 0.5);
 
   var out: VertexOut;
   out.position = vec4f(position, 0.0, 1.0);
   out.local = corner;
-  out.color = auroraColor(particle.position, particle.depth, aurora, render.time, particle.seed);
-  out.color = mix(out.color, vec3f(1.0, 0.94, 0.74), glint * 0.45);
-  out.alpha = render.opacity * mask * lifeFade(particle) * (0.042 + energy * 0.08 + aurora * 0.115 + (1.0 - particle.depth) * 0.018 + glint * 0.16 + pointerWake * 0.15);
+  out.color = fieldColor(particle, render.time);
+  out.color = mix(out.color, vec3f(1.0, 0.94, 0.74), glintShimmer * 0.55);
+  let baseAlpha = 0.045 + abs(particle.mCurl) * 4.5 + speed * 0.7 + particle.mEnergy * 0.4;
+  out.alpha = render.opacity * mask * lifeFade(particle) * headShimmer * (baseAlpha + glintShimmer * 0.25 + pointerWake * 0.18);
   return out;
 }
 
@@ -359,7 +404,7 @@ fn lineFragment(input: VertexOut) -> @location(0) vec4f {
   let headFade = smoothstep(0.0, 0.16, input.local.x);
   let tailFade = 1.0 - smoothstep(0.82, 1.0, input.local.x) * 0.24;
   let alpha = input.alpha * side * headFade * tailFade;
-  return vec4f(input.color * 1.18, alpha);
+  return vec4f(input.color * 1.2, alpha);
 }
 
 @vertex
@@ -368,25 +413,39 @@ fn spriteVertex(
   @builtin(instance_index) instanceIndex: u32,
 ) -> VertexOut {
   let particle = particles[instanceIndex];
-  let corner = spriteCorner(vertexIndex);
+  let corners = array<vec2f, 6>(
+    vec2f(-1.0, -1.0),
+    vec2f(1.0, -1.0),
+    vec2f(-1.0, 1.0),
+    vec2f(-1.0, 1.0),
+    vec2f(1.0, -1.0),
+    vec2f(1.0, 1.0),
+  );
+  let corner = corners[vertexIndex];
   let ndcPixel = vec2f(2.0 / render.viewport.x, 2.0 / render.viewport.y);
   let marker = smoothstep(0.92, 0.998, hash11(particle.seed * 17.17));
   let node = step(0.9992, hash11(particle.seed * 29.17));
   let glint = step(0.966, hash11(particle.seed * 41.83));
-  let energy = fieldEnergy(particle.position, render.time);
-  let aurora = auroraEnergy(particle.position, render.time);
-  let pointerWake = (1.0 - smoothstep(0.02, 0.43, length(particle.position - render.pointer))) * render.pointerStrength;
+  let toPointer = particle.position - render.pointer;
+  let pointerDistance = length(vec2f(toPointer.x * render.aspect, toPointer.y));
+  let pointerWake = (1.0 - smoothstep(0.02, 0.43, pointerDistance)) * render.pointerStrength;
+  let glintSlow = 0.25 + 0.75 * smoothstep(0.0, 1.0, sin(render.time * 0.5 + particle.seed * 0.16) * 0.5 + 0.5);
+  let glintShimmer = glint * (0.4 + 0.6 * sin(render.time * 4.6 + particle.seed * 3.1 + particle.position.x * 2.4)) * glintSlow;
+  let nodeSlow = 0.3 + 0.7 * smoothstep(0.0, 1.0, sin(render.time * 0.42 + particle.seed * 0.19) * 0.5 + 0.5);
+  let nodeTwinkle = node * (0.55 + 0.45 * sin(render.time * 2.8 + particle.seed * 5.7)) * nodeSlow;
   let pulse = 0.9 + sin(render.time * 1.8 + particle.seed * 0.031) * 0.1;
-  let radiusPixels = (0.65 + marker * (2.8 + energy * 2.0 + aurora * 3.0) + node * 1.4 + glint * 5.4 + pointerWake * 3.6) * pulse;
+  let shimmerPulse = pulse * (0.85 + 0.15 * smoothstep(0.0, 1.0, sin(render.time * 0.65 + particle.seed * 0.11) * 0.5 + 0.5));
+  let curlBright = abs(particle.mCurl) * 90.0;
+  let radiusPixels = (0.65 + marker * (2.8 + particle.mSpeed * 3.0 + curlBright) + node * 1.4 + glint * 5.4 + pointerWake * 3.6) * shimmerPulse;
   let position = particle.position + corner * ndcPixel * radiusPixels;
   let mask = sceneMask(particle.position);
 
   var out: VertexOut;
   out.position = vec4f(position, 0.0, 1.0);
   out.local = corner;
-  out.color = auroraColor(particle.position, particle.depth, aurora, render.time, particle.seed);
-  out.color = mix(out.color, vec3f(1.0, 0.94, 0.74), max(glint * 0.55, node * 0.28));
-  out.alpha = render.opacity * mask * lifeFade(particle) * (marker * (0.14 + energy * 0.18 + aurora * 0.22) + node * 0.1 + glint * 0.32 + pointerWake * 0.24);
+  out.color = fieldColor(particle, render.time);
+  out.color = mix(out.color, vec3f(1.0, 0.94, 0.74), max(glintShimmer * 0.6, nodeTwinkle * 0.34));
+  out.alpha = render.opacity * mask * lifeFade(particle) * (marker * (0.12 + particle.mSpeed * 0.4 + curlBright * 0.4) + nodeTwinkle * 0.12 + glintShimmer * 0.42 + pointerWake * 0.24);
   return out;
 }
 
@@ -397,6 +456,51 @@ fn spriteFragment(input: VertexOut) -> @location(0) vec4f {
   let core = smoothstep(0.48, 0.0, distance);
   let alpha = input.alpha * (disc * 0.72 + core * 0.5);
   return vec4f(input.color * (0.9 + core * 0.95), alpha);
+}
+`
+
+const accumulationShader = /* wgsl */ `
+struct Accum {
+  decay: f32,
+  time: f32,
+  aspect: f32,
+  motion: f32,
+  viewport: vec2f,
+  padding: vec2f,
+}
+
+struct VertexOut {
+  @builtin(position) position: vec4f,
+  @location(0) uv: vec2f,
+}
+
+@group(0) @binding(0) var accumSampler: sampler;
+@group(0) @binding(1) var historyTexture: texture_2d<f32>;
+@group(0) @binding(2) var sceneTexture: texture_2d<f32>;
+@group(0) @binding(3) var<uniform> accum: Accum;
+
+@vertex
+fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOut {
+  let positions = array<vec2f, 3>(
+    vec2f(-1.0, -1.0),
+    vec2f(3.0, -1.0),
+    vec2f(-1.0, 3.0),
+  );
+  let position = positions[vertexIndex];
+
+  var out: VertexOut;
+  out.position = vec4f(position, 0.0, 1.0);
+  out.uv = position * 0.5 + vec2f(0.5, 0.5);
+  return out;
+}
+
+@fragment
+fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
+  let prev = textureSample(historyTexture, accumSampler, input.uv).rgb;
+  let scene = textureSample(sceneTexture, accumSampler, input.uv).rgb;
+  let decayed = prev * accum.decay;
+  let combined = decayed + scene;
+  return vec4f(combined, 1.0);
 }
 `
 
@@ -419,7 +523,7 @@ struct VertexOut {
 }
 
 @group(0) @binding(0) var postSampler: sampler;
-@group(0) @binding(1) var sceneTexture: texture_2d<f32>;
+@group(0) @binding(1) var historyTexture: texture_2d<f32>;
 @group(0) @binding(2) var<uniform> render: Render;
 
 @vertex
@@ -441,53 +545,90 @@ fn hash21(point: vec2f) -> f32 {
   return fract(sin(dot(point, vec2f(127.1, 311.7))) * 43758.5453123);
 }
 
-fn curtain(uv: vec2f, time: f32, phase: f32, baseY: f32, thickness: f32) -> f32 {
-  let wave = sin(uv.x * 5.4 + sin(uv.x * 2.2 + time * 0.05 + phase) * 1.3 + phase + time * 0.08);
-  let ridge = baseY + wave * 0.055 + sin(uv.x * 16.0 + phase + time * 0.07) * 0.018;
-  let distanceToRidge = abs(uv.y - ridge);
-  let band = 1.0 - smoothstep(thickness, thickness * 2.8, distanceToRidge);
-  let lift = (1.0 - smoothstep(thickness * 2.4, thickness * 5.2, distanceToRidge)) * 0.34;
-  let columnWave = 0.5 + 0.5 * sin(uv.x * 46.0 + uv.y * 8.0 + phase * 3.1 + time * 0.28);
-  let columns = 0.34 + 0.66 * columnWave * columnWave;
-  let verticalFade = smoothstep(0.02, 0.18, uv.y) * (1.0 - smoothstep(0.94, 1.08, uv.y));
-  let sideFade = smoothstep(-0.02, 0.16, uv.x) * (1.0 - smoothstep(0.98, 1.12, uv.x));
-  return (band * columns + lift) * verticalFade * sideFade;
+fn hash22(point: vec2f) -> vec2f {
+  let q = vec2f(dot(point, vec2f(127.1, 311.7)), dot(point, vec2f(269.5, 183.3)));
+  return -1.0 + 2.0 * fract(sin(q) * 43758.5453);
+}
+
+fn snoise2(point: vec2f) -> f32 {
+  let K1 = 0.366025404;
+  let K2 = 0.211324865;
+  let i = floor(point + (point.x + point.y) * K1);
+  let a = point - i + (i.x + i.y) * K2;
+  let o = step(a.yx, a.xy);
+  let b = a - o + K2;
+  let c = a - 1.0 + 2.0 * K2;
+  let h = max(0.5 - vec3f(dot(a, a), dot(b, b), dot(c, c)), vec3f(0.0));
+  let n = h * h * h * h * vec3f(
+    dot(a, hash22(i)),
+    dot(b, hash22(i + o)),
+    dot(c, hash22(i + vec2f(1.0))),
+  );
+  return dot(n, vec3f(70.0, 70.0, 70.0));
+}
+
+fn ridge(uv: vec2f, time: f32) -> f32 {
+  let domain = uv * vec2f(3.2, 2.4) + vec2f(time * 0.05, -time * 0.03);
+  let n = snoise2(domain) * 0.5 + 0.5;
+  let r = 1.0 - abs(n * 2.0 - 1.0);
+  return pow(r, 5.5);
+}
+
+fn ridge2(uv: vec2f, time: f32) -> f32 {
+  let domain = uv * vec2f(5.8, 3.6) + vec2f(-time * 0.04, time * 0.06);
+  let n = snoise2(domain) * 0.5 + 0.5;
+  let r = 1.0 - abs(n * 2.0 - 1.0);
+  return pow(r, 7.0);
 }
 
 fn skyColor(uv: vec2f, time: f32) -> vec3f {
   let vertical = smoothstep(0.0, 1.0, uv.y);
-  var color = mix(vec3f(0.006, 0.007, 0.011), vec3f(0.018, 0.054, 0.04), vertical);
-  color += vec3f(0.032, 0.008, 0.04) * smoothstep(0.24, 0.92, uv.x) * smoothstep(0.06, 0.8, uv.y);
+  var color = mix(vec3f(0.005, 0.007, 0.012), vec3f(0.014, 0.05, 0.04), vertical);
+  color += vec3f(0.028, 0.006, 0.038) * smoothstep(0.24, 0.92, uv.x) * smoothstep(0.06, 0.8, uv.y);
 
   let starGrid = floor(uv * vec2f(260.0, 150.0));
   let star = step(0.9955, hash21(starGrid));
-  let twinkle = 0.62 + 0.38 * sin(time * 1.9 + hash21(starGrid + vec2f(11.0, 11.0)) * 6.2831);
-  color += vec3f(0.5, 0.86, 0.74) * star * twinkle * 0.26 * smoothstep(0.2, 0.96, uv.y);
+  let twinkle = 0.5 + 0.5 * smoothstep(0.0, 1.0, sin(time * 0.8 + hash21(starGrid + vec2f(11.0, 11.0)) * 6.2831) * 0.5 + 0.5);
+  let microTwinkle = 0.7 + 0.3 * sin(time * 2.4 + hash21(starGrid + vec2f(3.0, 7.0)) * 12.0);
+  color += vec3f(0.5, 0.86, 0.74) * star * twinkle * microTwinkle * 0.26 * smoothstep(0.2, 0.96, uv.y);
 
   return color;
 }
 
 @fragment
 fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
-  let textureSize = vec2f(textureDimensions(sceneTexture, 0));
-  let texel = 1.0 / max(textureSize, vec2f(1.0, 1.0));
-  let center = textureSample(sceneTexture, postSampler, input.uv);
-  var bloom = center.rgb * 0.56;
-  bloom += textureSample(sceneTexture, postSampler, input.uv + texel * vec2f(2.0, 0.0)).rgb * 0.16;
-  bloom += textureSample(sceneTexture, postSampler, input.uv + texel * vec2f(-2.0, 0.0)).rgb * 0.16;
-  bloom += textureSample(sceneTexture, postSampler, input.uv + texel * vec2f(0.0, 2.0)).rgb * 0.14;
-  bloom += textureSample(sceneTexture, postSampler, input.uv + texel * vec2f(0.0, -2.0)).rgb * 0.14;
+  let texel = 1.0 / max(render.viewport, vec2f(1.0, 1.0));
+  let scene = textureSample(historyTexture, postSampler, input.uv).rgb;
 
-  let high = curtain(input.uv, render.time, 1.7, 0.7, 0.15);
-  let middle = curtain(input.uv, render.time, 4.6, 0.5, 0.12);
-  let low = curtain(input.uv, render.time, 7.9, 0.33, 0.096);
-  let aurora =
-    vec3f(0.12, 0.9, 0.45) * high +
-    vec3f(0.06, 0.64, 0.96) * middle +
-    vec3f(0.76, 0.24, 0.92) * low;
-  let pointerGlow = 1.0 - smoothstep(0.0, 0.55, distance(input.uv * 2.0 - vec2f(1.0, 1.0), render.pointer));
-  let sceneLight = center.rgb * 0.76 + bloom * vec3f(0.72, 1.02, 0.86);
-  let color = skyColor(input.uv, render.time) + aurora * 1.72 + sceneLight + vec3f(0.12, 0.82, 0.54) * pointerGlow * render.pointerStrength * 0.2;
+  var bloom = scene * 0.62;
+  bloom += textureSample(historyTexture, postSampler, input.uv + texel * vec2f(2.5, 0.0)).rgb * 0.16;
+  bloom += textureSample(historyTexture, postSampler, input.uv + texel * vec2f(-2.5, 0.0)).rgb * 0.16;
+  bloom += textureSample(historyTexture, postSampler, input.uv + texel * vec2f(0.0, 2.5)).rgb * 0.14;
+  bloom += textureSample(historyTexture, postSampler, input.uv + texel * vec2f(0.0, -2.5)).rgb * 0.14;
+  bloom += textureSample(historyTexture, postSampler, input.uv + texel * vec2f(3.5, 3.5)).rgb * 0.07;
+  bloom += textureSample(historyTexture, postSampler, input.uv + texel * vec2f(-3.5, -3.5)).rgb * 0.07;
+
+  let r1 = ridge(input.uv, render.time);
+  let r2 = ridge2(input.uv * vec2f(1.0, 1.1) + vec2f(13.7, 7.1), render.time);
+  let sceneMag = length(scene);
+  let causticMask = smoothstep(0.0, 0.4, sceneMag);
+  let causticCore = smoothstep(0.04, 0.32, sceneMag);
+  let causticColor = vec3f(0.45, 0.95, 0.78) * r1 * 0.55 + vec3f(0.32, 0.78, 1.0) * r2 * 0.42;
+  let caustic = causticColor * causticMask * causticCore;
+
+  let pointerNdc = input.uv * 2.0 - vec2f(1.0, 1.0);
+  let pointerOffset = pointerNdc - render.pointer;
+  let pointerDistance = length(vec2f(pointerOffset.x * render.aspect, pointerOffset.y));
+  let pointerHalo = exp(-pointerDistance * pointerDistance * 7.5);
+  let pointerCore = exp(-pointerDistance * pointerDistance * 55.0);
+  let pointerLight = (pointerHalo * 0.78 + pointerCore * 0.22) * render.pointerStrength;
+  let causticLit = caustic * (1.0 + pointerLight * 1.4);
+  let bloomLit = bloom * (1.0 + pointerLight * 1.1);
+
+  let bloomPulse = 0.86 + 0.14 * smoothstep(0.0, 1.0, sin(render.time * 0.6) * 0.5 + 0.5);
+  let sceneLight = scene * 0.78 + bloomLit * vec3f(0.72, 1.02, 0.86) * bloomPulse;
+  let pointerColor = (vec3f(0.34, 0.86, 0.62) * pointerHalo + vec3f(0.7, 0.96, 0.82) * pointerCore) * render.pointerStrength * 0.28;
+  let color = skyColor(input.uv, render.time) + sceneLight + causticLit + pointerColor;
   let toneMapped = vec3f(1.0) - exp(-color * vec3f(1.02, 0.9, 0.98));
   return vec4f(toneMapped, 1.0);
 }
@@ -496,13 +637,13 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
 interface PointerState {
   x: number
   y: number
-  targetX: number
-  targetY: number
   strength: number
+  active: boolean
 }
 
 export interface FlowFieldRenderer {
   destroy: () => void
+  setMode: (mode: FieldMode) => void
 }
 
 export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise<FlowFieldRenderer> {
@@ -525,6 +666,7 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
 
   const gpuContext = context
   const format = navigator.gpu.getPreferredCanvasFormat()
+  const offscreenFormat: GPUTextureFormat = 'rgba16float'
   device.addEventListener('uncapturederror', (event) => {
     console.error(`Flow WebGPU error: ${event.error.message}`)
   })
@@ -548,6 +690,11 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
     size: UNIFORM_FLOATS * Float32Array.BYTES_PER_ELEMENT,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   })
+  const accumBuffer = device.createBuffer({
+    label: 'flow accumulation uniforms',
+    size: UNIFORM_FLOATS * Float32Array.BYTES_PER_ELEMENT,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  })
   const computeModule = device.createShaderModule({
     label: 'flow compute shader',
     code: computeShader,
@@ -555,6 +702,10 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
   const renderModule = device.createShaderModule({
     label: 'flow particle render shader',
     code: particleRenderShader,
+  })
+  const accumModule = device.createShaderModule({
+    label: 'flow accumulation shader',
+    code: accumulationShader,
   })
   const postModule = device.createShaderModule({
     label: 'flow post shader',
@@ -568,8 +719,24 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
       entryPoint: 'computeMain',
     },
   })
-  const linePipeline = createParticlePipeline(device, renderModule, format, 'lineVertex', 'lineFragment', 'flow line pipeline')
-  const spritePipeline = createParticlePipeline(device, renderModule, format, 'spriteVertex', 'spriteFragment', 'flow sprite pipeline')
+  const linePipeline = createParticlePipeline(device, renderModule, offscreenFormat, 'lineVertex', 'lineFragment', 'flow line pipeline')
+  const spritePipeline = createParticlePipeline(device, renderModule, offscreenFormat, 'spriteVertex', 'spriteFragment', 'flow sprite pipeline')
+  const accumPipeline = device.createRenderPipeline({
+    label: 'flow accumulation pipeline',
+    layout: 'auto',
+    vertex: {
+      module: accumModule,
+      entryPoint: 'vertexMain',
+    },
+    fragment: {
+      module: accumModule,
+      entryPoint: 'fragmentMain',
+      targets: [{ format: offscreenFormat }],
+    },
+    primitive: {
+      topology: 'triangle-list',
+    },
+  })
   const postPipeline = device.createRenderPipeline({
     label: 'flow post pipeline',
     layout: 'auto',
@@ -604,25 +771,31 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
     throw new Error(`Flow WebGPU setup failed: ${setupError.message}`)
   }
 
-  const sampler = device.createSampler({
+  const linearSampler = device.createSampler({
     label: 'flow post sampler',
     magFilter: 'linear',
     minFilter: 'linear',
   })
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   const pointer: PointerState = {
-    x: 0.42,
+    x: 0,
     y: 0,
-    targetX: 0.42,
-    targetY: 0,
     strength: 0,
+    active: false,
   }
   const simUniforms = new Float32Array(UNIFORM_FLOATS)
   const renderUniforms = new Float32Array(UNIFORM_FLOATS)
+  const accumUniforms = new Float32Array(UNIFORM_FLOATS)
+  const targetWeights = [1, 0, 0, 0, 0]
+  const currentWeights = [1, 0, 0, 0, 0]
   const abortController = new AbortController()
-  let offscreenTexture: GPUTexture | null = null
-  let postBindGroup: GPUBindGroup | null = null
+  let sceneTexture: GPUTexture | null = null
+  let historyA: GPUTexture | null = null
+  let historyB: GPUTexture | null = null
+  let historyViewA: GPUTextureView | null = null
+  let historyViewB: GPUTextureView | null = null
   let sourceIndex = 0
+  let historyIndex = 0
   let lastTime = 0
   let animationFrame = 0
   let active = true
@@ -632,18 +805,16 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
     'pointermove',
     (event) => {
       const rect = canvas.getBoundingClientRect()
-      pointer.targetX = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1
-      pointer.targetY = (1 - (event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1
-      pointer.strength = Math.min(1, pointer.strength + 0.18)
+      pointer.x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1
+      pointer.y = (1 - (event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1
+      pointer.active = true
     },
     { signal: abortController.signal },
   )
   canvas.addEventListener(
     'pointerleave',
     () => {
-      pointer.targetX = 0.42
-      pointer.targetY = 0
-      pointer.strength = Math.min(pointer.strength, 0.18)
+      pointer.active = false
     },
     { signal: abortController.signal },
   )
@@ -661,7 +832,7 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
   )
 
   function refreshTargets(): void {
-    if (!resizeCanvas(canvas) && offscreenTexture && postBindGroup) {
+    if (!resizeCanvas(canvas) && sceneTexture && historyA && historyB) {
       return
     }
 
@@ -671,36 +842,33 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
       alphaMode: 'opaque',
     })
 
-    offscreenTexture?.destroy()
-    offscreenTexture = device.createTexture({
-      label: 'flow offscreen texture',
-      size: {
-        width: canvas.width,
-        height: canvas.height,
-      },
-      format,
+    sceneTexture?.destroy()
+    historyA?.destroy()
+    historyB?.destroy()
+
+    const size = { width: canvas.width, height: canvas.height }
+
+    sceneTexture = device.createTexture({
+      label: 'flow scene texture',
+      size,
+      format: offscreenFormat,
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     })
-    postBindGroup = device.createBindGroup({
-      label: 'flow post bind group',
-      layout: postPipeline.getBindGroupLayout(0),
-      entries: [
-        {
-          binding: 0,
-          resource: sampler,
-        },
-        {
-          binding: 1,
-          resource: offscreenTexture.createView(),
-        },
-        {
-          binding: 2,
-          resource: {
-            buffer: renderBuffer,
-          },
-        },
-      ],
+    historyA = device.createTexture({
+      label: 'flow history A',
+      size,
+      format: offscreenFormat,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     })
+    historyB = device.createTexture({
+      label: 'flow history B',
+      size,
+      format: offscreenFormat,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    })
+
+    historyViewA = historyA.createView()
+    historyViewB = historyB.createView()
   }
 
   function frame(time: number): void {
@@ -712,21 +880,43 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
 
     refreshTargets()
 
-    if (!offscreenTexture || !postBindGroup) {
+    if (!sceneTexture || !historyA || !historyB || !historyViewA || !historyViewB) {
       scheduleFrame()
       return
     }
 
     const seconds = time * 0.001
-    const deltaTime = lastTime > 0 ? seconds - lastTime : 1 / 60
+    const deltaTime = lastTime > 0 ? Math.min(seconds - lastTime, 0.066) : 1 / 60
     const aspect = canvas.width / Math.max(1, canvas.height)
     const motion = reducedMotion ? 0.28 : 1
-    pointer.x += (pointer.targetX - pointer.x) * 0.065
-    pointer.y += (pointer.targetY - pointer.y) * 0.065
-    pointer.strength *= reducedMotion ? 0.9 : 0.965
+    if (pointer.active) {
+      pointer.strength = Math.min(1, pointer.strength + 0.4)
+    } else {
+      pointer.strength *= reducedMotion ? 0.86 : 0.94
+    }
     lastTime = seconds
 
-    simUniforms.set([deltaTime, seconds, aspect, motion, pointer.x, pointer.y, pointer.strength, 0])
+    const lerpAlpha = 1 - Math.exp(-7.0 * deltaTime)
+    for (let i = 0; i < 5; i += 1) {
+      currentWeights[i] += (targetWeights[i] - currentWeights[i]) * lerpAlpha
+    }
+
+    simUniforms.set([
+      deltaTime,
+      seconds,
+      aspect,
+      motion,
+      pointer.x,
+      pointer.y,
+      currentWeights[0],
+      currentWeights[1],
+      currentWeights[2],
+      currentWeights[3],
+      currentWeights[4],
+      0,
+      0,
+      0,
+    ])
     renderUniforms.set([
       seconds,
       aspect,
@@ -740,11 +930,32 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
       1,
       0,
       0,
+      0,
+      0,
+    ])
+    accumUniforms.set([
+      TRAIL_DECAY,
+      seconds,
+      aspect,
+      motion,
+      canvas.width,
+      canvas.height,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
     ])
     device.queue.writeBuffer(simBuffer, 0, simUniforms)
     device.queue.writeBuffer(renderBuffer, 0, renderUniforms)
+    device.queue.writeBuffer(accumBuffer, 0, accumUniforms)
 
     const targetIndex = 1 - sourceIndex
+    const historyRead = historyIndex
+    const historyWrite = 1 - historyIndex
     const encoder = device.createCommandEncoder({
       label: 'flow frame encoder',
     })
@@ -765,7 +976,7 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
       label: 'flow scene pass',
       colorAttachments: [
         {
-          view: offscreenTexture.createView(),
+          view: sceneTexture.createView(),
           clearValue: { r: 0, g: 0, b: 0, a: 0 },
           loadOp: 'clear',
           storeOp: 'store',
@@ -780,21 +991,63 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
     scenePass.draw(6, PARTICLE_COUNT)
     scenePass.end()
 
-    const postPass = encoder.beginRenderPass({
-      label: 'flow post pass',
-      colorAttachments: [
-        {
-          view: gpuContext.getCurrentTexture().createView(),
-          clearValue: { r: 0, g: 0, b: 0, a: 0 },
-          loadOp: 'clear',
-          storeOp: 'store',
-        },
-      ],
-    })
-    postPass.setPipeline(postPipeline)
-    postPass.setBindGroup(0, postBindGroup)
-    postPass.draw(3)
-    postPass.end()
+    const accumReadView = historyRead === 0 ? historyViewA : historyViewB
+    const accumWriteTexture = historyWrite === 0 ? historyA : historyB
+    const accumWriteView = historyWrite === 0 ? historyViewA : historyViewB
+
+    if (accumReadView && accumWriteTexture && accumWriteView) {
+      const accumBindGroup = device.createBindGroup({
+        label: 'flow accum pass bind group',
+        layout: accumPipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: linearSampler },
+          { binding: 1, resource: accumReadView },
+          { binding: 2, resource: sceneTexture.createView() },
+          { binding: 3, resource: { buffer: accumBuffer } },
+        ],
+      })
+      const accumPass = encoder.beginRenderPass({
+        label: 'flow accumulation pass',
+        colorAttachments: [
+          {
+            view: accumWriteTexture.createView(),
+            loadOp: 'clear',
+            clearValue: { r: 0, g: 0, b: 0, a: 0 },
+            storeOp: 'store',
+          },
+        ],
+      })
+      accumPass.setPipeline(accumPipeline)
+      accumPass.setBindGroup(0, accumBindGroup)
+      accumPass.draw(3)
+      accumPass.end()
+
+      const postBindGroup = device.createBindGroup({
+        label: 'flow post bind group',
+        layout: postPipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: linearSampler },
+          { binding: 1, resource: accumWriteView },
+          { binding: 2, resource: { buffer: renderBuffer } },
+        ],
+      })
+
+      const postPass = encoder.beginRenderPass({
+        label: 'flow post pass',
+        colorAttachments: [
+          {
+            view: gpuContext.getCurrentTexture().createView(),
+            clearValue: { r: 0, g: 0, b: 0, a: 0 },
+            loadOp: 'clear',
+            storeOp: 'store',
+          },
+        ],
+      })
+      postPass.setPipeline(postPipeline)
+      postPass.setBindGroup(0, postBindGroup)
+      postPass.draw(3)
+      postPass.end()
+    }
 
     device.queue.submit([encoder.finish()])
 
@@ -808,6 +1061,7 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
     }
 
     sourceIndex = targetIndex
+    historyIndex = historyWrite
     scheduleFrame()
   }
 
@@ -833,11 +1087,20 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
         animationFrame = 0
       }
 
-      offscreenTexture?.destroy()
+      sceneTexture?.destroy()
+      historyA?.destroy()
+      historyB?.destroy()
       particleBuffers[0].destroy()
       particleBuffers[1].destroy()
       simBuffer.destroy()
       renderBuffer.destroy()
+      accumBuffer.destroy()
+    },
+    setMode: (mode: FieldMode) => {
+      const nextActive = MODE_INDEX[mode] ?? 0
+      for (let i = 0; i < 5; i += 1) {
+        targetWeights[i] = i === nextActive ? 1 : 0
+      }
     },
   }
 
@@ -864,24 +1127,9 @@ function createComputeBindGroup(
     label: 'flow compute bind group',
     layout: pipeline.getBindGroupLayout(0),
     entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: source,
-        },
-      },
-      {
-        binding: 1,
-        resource: {
-          buffer: target,
-        },
-      },
-      {
-        binding: 2,
-        resource: {
-          buffer: uniforms,
-        },
-      },
+      { binding: 0, resource: { buffer: source } },
+      { binding: 1, resource: { buffer: target } },
+      { binding: 2, resource: { buffer: uniforms } },
     ],
   })
 }
@@ -896,18 +1144,8 @@ function createRenderBindGroup(
     label: 'flow render bind group',
     layout: pipeline.getBindGroupLayout(0),
     entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: particles,
-        },
-      },
-      {
-        binding: 1,
-        resource: {
-          buffer: uniforms,
-        },
-      },
+      { binding: 0, resource: { buffer: particles } },
+      { binding: 1, resource: { buffer: uniforms } },
     ],
   })
 }
@@ -961,7 +1199,6 @@ function createInitialParticles(count: number): Float32Array {
     const seed = index * 0.61803398875 + 0.123
     const offset = index * FLOATS_PER_PARTICLE
     const depth = hash(seed * 7.41)
-    const lifetime = lerp(10, 20, hash(seed * 3.91))
 
     particles[offset] = lerp(-0.92, 1.46, hash(seed))
     particles[offset + 1] = lerp(-1.12, 1.1, hash(seed * 2.31))
@@ -969,8 +1206,12 @@ function createInitialParticles(count: number): Float32Array {
     particles[offset + 3] = lerp(-0.11, 0.12, hash(seed * 5.19))
     particles[offset + 4] = seed
     particles[offset + 5] = depth
-    particles[offset + 6] = hash(seed * 11.7) * lifetime
+    particles[offset + 6] = hash(seed * 11.7) * lerp(10, 20, depth)
     particles[offset + 7] = lerp(-1, 1, hash(seed * 13.3))
+    particles[offset + 8] = 0
+    particles[offset + 9] = 0
+    particles[offset + 10] = 0
+    particles[offset + 11] = 0
   }
 
   return particles
