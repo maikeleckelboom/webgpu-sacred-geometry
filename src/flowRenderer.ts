@@ -606,6 +606,10 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOut {
   return out;
 }
 
+fn softCap(color: vec3f) -> vec3f {
+  return color / (vec3f(1.0) + color * 0.2);
+}
+
 @fragment
 fn fragmentMain(input: VertexOut) -> FragmentOut {
   let prev = textureSample(historyTexture, accumSampler, input.uv).rgb;
@@ -616,8 +620,8 @@ fn fragmentMain(input: VertexOut) -> FragmentOut {
   let emissiveDecay = min(accum.decay, 0.948);
 
   var out: FragmentOut;
-  out.visible = vec4f(decayed + scene, 1.0);
-  out.emissive = vec4f(prevEmissive * emissiveDecay + sceneEmissive, 1.0);
+  out.visible = vec4f(softCap(decayed + scene), 1.0);
+  out.emissive = vec4f(softCap(prevEmissive * emissiveDecay + sceneEmissive), 1.0);
   return out;
 }
 `;
