@@ -1,8 +1,9 @@
-export type LabRoute = 'mandala' | 'flow-field' | 'topography' | 'architecture' | 'waves'
+export type LabRoute = 'mandala' | 'flow-field' | 'aurora' | 'topography' | 'architecture' | 'waves'
 
 const navItems: Array<{ route: LabRoute; href: string; label: string }> = [
   { route: 'mandala', href: '/', label: 'Mandala' },
   { route: 'flow-field', href: '/flow-field', label: 'Flow field' },
+  { route: 'aurora', href: '/aurora', label: 'Aurora' },
   { route: 'topography', href: '/topography', label: 'Topography' },
   { route: 'architecture', href: '/architecture', label: 'Architecture' },
   { route: 'waves', href: '/waves', label: 'Waves' },

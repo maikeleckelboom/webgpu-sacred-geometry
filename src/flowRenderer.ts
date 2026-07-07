@@ -134,15 +134,17 @@ fn auroraShear(point: vec2f, time: f32) -> vec2f {
 
 // === Field modes ===
 fn fieldModeFlow(point: vec2f, time: f32) -> vec2f {
-  let c1 = vec2f(0.36 + sin(time * 0.08) * 0.08, -0.04 + cos(time * 0.10) * 0.06);
-  let c2 = vec2f(0.86 + cos(time * 0.12) * 0.06, 0.30 + sin(time * 0.09) * 0.05);
-  let c3 = vec2f(0.20 + sin(time * 0.07) * 0.08, 0.55 + cos(time * 0.11) * 0.04);
-  var f = curlNoise2D(point * 1.3, time) * 0.22;
-  f += auroraShear(point, time);
-  f += vortex(point, c1, 0.80) * 0.012;
+  let fieldShift = vec2f(0.24, 0.0);
+  let p = point - fieldShift;
+  let c1 = vec2f(0.24 + sin(time * 0.08) * 0.08, -0.04 + cos(time * 0.10) * 0.06);
+  let c2 = vec2f(0.78 + cos(time * 0.12) * 0.06, 0.34 + sin(time * 0.09) * 0.05);
+  let c3 = vec2f(0.04 + sin(time * 0.07) * 0.08, 0.55 + cos(time * 0.11) * 0.04);
+  var f = curlNoise2D(p * 1.3, time) * 0.22;
+  f += auroraShear(p, time);
+  f += vortex(point, c1, 0.80) * 0.014;
   f += vortex(point, c2, -0.45) * 0.015;
   f += vortex(point, c3, 0.30) * 0.013;
-  f += goldenLattice(point, time) * 0.55;
+  f += goldenLattice(p, time) * 0.55;
   return f;
 }
 

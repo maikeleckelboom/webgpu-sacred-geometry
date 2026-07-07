@@ -1,5 +1,6 @@
 import './style.css'
 import { mountArchitecturePage } from './architecturePage'
+import { mountAuroraPage } from './auroraPage'
 import { mountFlowFieldPage } from './flowPage'
 import { mountMandalaPage } from './mandalaPage'
 import { createLabHeader, setLabHeaderActive, type LabRoute } from './navigation'
@@ -23,6 +24,7 @@ const appRoot = app
 const pageRoutes: Record<string, PageRoute> = {
   '/': { mount: mountMandalaPage, route: 'mandala' },
   '/flow-field': { mount: mountFlowFieldPage, route: 'flow-field' },
+  '/aurora': { mount: mountAuroraPage, route: 'aurora' },
   '/topography': { mount: mountTopographyPage, route: 'topography' },
   '/architecture': { mount: mountArchitecturePage, route: 'architecture' },
   '/waves': { mount: mountWavesPage, route: 'waves' },

@@ -20,7 +20,8 @@ Open the local Vite URL in a WebGPU-capable browser.
 ## Pages
 
 - `/` keeps the original luminous mandala study.
-- `/flow-field` adds the high-key editorial composition with a compute-driven WebGPU particle field.
+- `/flow-field` drives a high-key editorial composition from a single mathematical vector field: curl noise, three moving vortex attractors, an aurora shear curtain, a hidden golden-angle attractor lattice, field-metric-driven particle styling, and an accumulation buffer trail memory. Nav hover swaps the field between flow / mandala / topography / architecture / wave modes.
+- `/aurora` keeps the older aurora particle field (sine-flow + lens attractors + curtains) as a separate study.
 - `/topography` adds a grayscale terrain study with procedural contour layers, metallic lighting, fog, and a post-process lens pass.
 - `/architecture` adds a premium architectural network field with clustered nodes, instanced rails, translucent planes, depth focus, and reduced-motion-aware camera drift.
 - `/waves` adds a high-key graphite streamline reconstruction of the supplied WebGPU waves reference.
