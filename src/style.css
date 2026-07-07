@@ -27,12 +27,24 @@ body.mandala-page-body {
   background: #000;
 }
 
-body.flow-page-body,
 body.topography-page-body,
 body.architecture-page-body,
 body.waves-page-body {
   color-scheme: light;
   background: #f8f8f5;
+}
+
+body.flow-page-body {
+  color-scheme: dark;
+  background: #020305;
+}
+
+body.flow-page-body .lab-header {
+  --lab-surface: rgba(4, 7, 10, 0.74);
+  --lab-text: #f5fff6;
+  --lab-muted: rgba(218, 241, 230, 0.68);
+  --lab-border: rgba(129, 255, 193, 0.18);
+  --lab-active: #89ffc1;
 }
 
 #app {
@@ -294,11 +306,34 @@ body.waves-page-body {
 }
 
 .study-page--flow {
+  --study-bg: #020305;
+  --study-text: #f5fff6;
+  --study-muted: rgba(216, 238, 229, 0.76);
+  --study-kicker: rgba(139, 255, 195, 0.82);
+  --study-primary-bg: #d8ffe8;
+  --study-primary-text: #03120c;
+  --study-secondary: rgba(231, 244, 238, 0.9);
+  --study-secondary-border: rgba(133, 255, 198, 0.36);
+  --study-status-bg: rgba(2, 5, 8, 0.92);
+  --study-status-border: rgba(120, 255, 196, 0.32);
   --study-scrim:
-    linear-gradient(90deg, rgba(248, 248, 245, 0.995) 0%, rgba(248, 248, 245, 0.985) 38%, rgba(248, 248, 245, 0.76) 51%, rgba(248, 248, 245, 0.18) 72%, transparent 86%);
+    linear-gradient(90deg, rgba(2, 3, 5, 0.98) 0%, rgba(2, 3, 5, 0.84) 30%, rgba(2, 3, 5, 0.34) 52%, rgba(2, 3, 5, 0.06) 72%, transparent 88%),
+    linear-gradient(180deg, rgba(2, 3, 5, 0.44) 0%, transparent 30%, rgba(2, 3, 5, 0.28) 100%);
   --study-vignette:
-    radial-gradient(circle at 72% 44%, transparent 0%, transparent 46%, rgba(248, 248, 245, 0.22) 76%, rgba(248, 248, 245, 0.58) 100%),
-    linear-gradient(0deg, rgba(248, 248, 245, 0.9) 0%, rgba(248, 248, 245, 0.22) 18%, transparent 42%);
+    linear-gradient(90deg, rgba(137, 255, 193, 0.06) 0%, transparent 18%, transparent 100%),
+    linear-gradient(0deg, rgba(2, 3, 5, 0.72) 0%, rgba(2, 3, 5, 0.18) 17%, transparent 46%);
+}
+
+.study-page--flow .study-canvas-layer {
+  background: #020305;
+}
+
+.study-page--flow .study-action--primary {
+  box-shadow: 0 1.2rem 3rem rgba(100, 255, 181, 0.24);
+}
+
+.study-page--flow .study-action--secondary {
+  text-shadow: 0 0 1.2rem rgba(88, 225, 255, 0.32);
 }
 
 .study-page--architecture {
@@ -330,8 +365,8 @@ body.waves-page-body {
 }
 
 .flow-canvas {
-  background: transparent;
-  mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.2) 18%, #000 38%);
+  background: #020305;
+  mask-image: none;
 }
 
 .mandala-canvas {
@@ -421,6 +456,12 @@ body.waves-page-body {
       radial-gradient(circle at 52% 54%, rgba(15, 28, 54, 0.2), transparent 24rem);
   }
 
+  .study-page--flow::before {
+    background:
+      linear-gradient(180deg, rgba(2, 3, 5, 0.98) 0%, rgba(2, 3, 5, 0.78) 48%, rgba(2, 3, 5, 0.18) 100%),
+      linear-gradient(90deg, rgba(2, 3, 5, 0.92) 0%, rgba(2, 3, 5, 0.54) 64%, rgba(2, 3, 5, 0.08) 100%);
+  }
+
   .study-hero {
     align-self: start;
     padding-top: clamp(3.1rem, 10vh, 6rem);
@@ -454,7 +495,7 @@ body.waves-page-body {
   }
 
   .flow-canvas {
-    mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.76) 68%, transparent 100%);
+    mask-image: none;
   }
 }
 
