@@ -1,7 +1,7 @@
 const PARTICLE_COUNT = 68000
 const WORKGROUP_SIZE = 64
 const FLOATS_PER_PARTICLE = 8
-const UNIFORM_FLOATS = 8
+const UNIFORM_FLOATS = 12
 
 const computeShader = /* wgsl */ `
 const particleCount = ${PARTICLE_COUNT}u;
@@ -75,6 +75,42 @@ fn vortex(point: vec2f, center: vec2f, spin: f32, radius: f32, orbitStrength: f3
   return tangent * orbitStrength * shell + toward * pullStrength * inner;
 }
 
+fn lensPosition(slot: u32, time: f32, pointer: vec2f, pointerStrength: f32) -> vec2f {
+  var base = vec2f(0.58, -0.28);
+  var drift = vec2f(sin(time * 0.18) * 0.035, cos(time * 0.14) * 0.026);
+
+  if (slot == 1u) {
+    base = vec2f(0.94, 0.23);
+    drift = vec2f(cos(time * 0.13) * 0.03, sin(time * 0.17) * 0.025);
+  } else if (slot == 2u) {
+    base = vec2f(1.18, -0.5);
+    drift = vec2f(sin(time * 0.1) * 0.045, cos(time * 0.12) * 0.03);
+  } else if (slot == 3u) {
+    base = vec2f(0.28, 0.49);
+    drift = vec2f(cos(time * 0.11) * 0.034, sin(time * 0.13) * 0.03);
+  } else if (slot == 4u) {
+    base = vec2f(1.25, 0.45);
+    drift = vec2f(cos(time * 0.09) * 0.025, sin(time * 0.18) * 0.024);
+  }
+
+  let moving = base + drift;
+  let toPointer = pointer - moving;
+  let pointerPull = (1.0 - smoothstep(0.04, 0.48, length(toPointer))) * pointerStrength;
+  return moving + toPointer * pointerPull * 0.08;
+}
+
+fn lensGravity(point: vec2f, lens: vec2f, radius: f32, mass: f32, spin: f32) -> vec2f {
+  let toLens = lens - point;
+  let distance = max(length(toLens), 0.001);
+  let toward = toLens / distance;
+  let tangent = vec2f(-toward.y, toward.x) * spin;
+  let shell = smoothstep(radius * 1.15, radius * 4.0, distance) * (1.0 - smoothstep(radius * 7.0, radius * 13.0, distance));
+  let wide = 1.0 - smoothstep(radius * 4.0, radius * 16.0, distance);
+  let core = 1.0 - smoothstep(radius * 0.65, radius * 2.0, distance);
+  let softened = 1.0 / (1.0 + distance * distance * 10.0);
+  return tangent * mass * 0.58 * shell * softened + toward * mass * 0.16 * wide * softened - toward * mass * 0.28 * core;
+}
+
 @compute @workgroup_size(${WORKGROUP_SIZE})
 fn computeMain(@builtin(global_invocation_id) globalId: vec3u) {
   if (globalId.x >= particleCount) {
@@ -127,13 +163,27 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u) {
   let bridgeCF = normalize(centerC - centerF + vec2f(-0.001, 0.001)) * weightC * weightF * 0.045;
   let saddle = bridgeAB + bridgeAC + bridgeBD + bridgeCF;
 
-  let pointerVector = position - sim.pointer;
-  let pointerDistance = max(length(pointerVector), 0.001);
-  let pointerFalloff = (1.0 - smoothstep(0.02, 0.36, pointerDistance)) * sim.pointerStrength;
-  let pointerDeflection = normalize(pointerVector + vec2f(0.001, 0.001)) * pointerFalloff * 0.34;
+  let lensA = lensPosition(0u, sim.time, sim.pointer, sim.pointerStrength);
+  let lensB = lensPosition(1u, sim.time, sim.pointer, sim.pointerStrength);
+  let lensC = lensPosition(2u, sim.time, sim.pointer, sim.pointerStrength);
+  let lensD = lensPosition(3u, sim.time, sim.pointer, sim.pointerStrength);
+  let lensE = lensPosition(4u, sim.time, sim.pointer, sim.pointerStrength);
+  let lensField =
+    lensGravity(position, lensA, 0.055, 0.076, 1.0) +
+    lensGravity(position, lensB, 0.04, 0.052, -1.0) +
+    lensGravity(position, lensC, 0.07, 0.068, 1.0) +
+    lensGravity(position, lensD, 0.035, 0.046, -1.0) +
+    lensGravity(position, lensE, 0.047, 0.044, 1.0);
 
-  let targetVelocity = river + vortexField + saddle + pointerDeflection;
-  let response = 0.035 + particle.depth * 0.052;
+  let toPointer = sim.pointer - position;
+  let pointerDistance = max(length(toPointer), 0.001);
+  let pointerToward = toPointer / pointerDistance;
+  let pointerTangent = vec2f(-pointerToward.y, pointerToward.x);
+  let pointerFalloff = (1.0 - smoothstep(0.02, 0.78, pointerDistance)) * sim.pointerStrength;
+  let pointerDeflection = pointerTangent * pointerFalloff * 0.42 + pointerToward * pointerFalloff * 0.18;
+
+  let targetVelocity = river + vortexField + saddle + lensField + pointerDeflection;
+  let response = 0.03 + particle.depth * 0.048 + pointerFalloff * 0.05;
   particle.velocity = mix(particle.velocity, targetVelocity, response);
   particle.position = particle.position + particle.velocity * deltaTime * sim.motion * (0.5 + particle.depth * 0.5);
   particle.age = particle.age + deltaTime * (0.68 + particle.depth * 0.34);
@@ -162,6 +212,9 @@ struct Render {
   opacity: f32,
   pixelRatio: f32,
   viewport: vec2f,
+  pointer: vec2f,
+  pointerStrength: f32,
+  fieldGain: f32,
   padding: vec2f,
 }
 
@@ -245,24 +298,25 @@ fn lineVertex(
   let screenNormal = vec2f(-screenDirection.y, screenDirection.x);
   let ndcPixel = vec2f(2.0 / render.viewport.x, 2.0 / render.viewport.y);
   let normal = vec2f(screenNormal.x * ndcPixel.x, screenNormal.y * ndcPixel.y);
-  let trail = 0.015 + speed * 0.076 + particle.depth * 0.022;
+  let pointerWake = (1.0 - smoothstep(0.035, 0.5, length(particle.position - render.pointer))) * render.pointerStrength;
+  let trail = 0.012 + speed * 0.056 + particle.depth * 0.018 + pointerWake * 0.045;
   let head = particle.position;
   let tail = head - direction * trail;
   let center = mix(tail, head, corner.x);
   let focusBand = 1.0 - abs(particle.depth - 0.56) * 1.7;
   let blur = smoothstep(0.82, 1.0, particle.depth) + smoothstep(0.08, 0.0, particle.depth);
-  let widthPixels = 0.28 + clamp(focusBand, 0.0, 1.0) * 0.44 + blur * 0.58 + speed * 2.9;
+  let widthPixels = 0.24 + clamp(focusBand, 0.0, 1.0) * 0.38 + blur * 0.48 + speed * 2.35 + pointerWake * 0.95;
   let position = center + normal * corner.y * widthPixels;
   let mask = rightSideMask(particle.position);
   let energy = fieldEnergy(particle.position, render.time);
-  let glint = step(0.992, hash11(particle.seed * 23.71));
+  let glint = step(0.986, hash11(particle.seed * 23.71));
 
   var out: VertexOut;
   out.position = vec4f(position, 0.0, 1.0);
   out.local = corner;
   out.color = mix(vec3f(0.62, 0.67, 0.7), vec3f(0.18, 0.19, 0.2), particle.depth);
-  out.color = mix(out.color, vec3f(0.58, 0.78, 0.9), glint);
-  out.alpha = render.opacity * mask * lifeFade(particle) * (0.016 + energy * 0.046 + (1.0 - particle.depth) * 0.009 + glint * 0.056);
+  out.color = mix(out.color, vec3f(0.48, 0.76, 0.94), max(glint, pointerWake * 0.55));
+  out.alpha = render.opacity * mask * lifeFade(particle) * (0.015 + energy * 0.041 + (1.0 - particle.depth) * 0.008 + glint * 0.062 + pointerWake * 0.062);
   return out;
 }
 
@@ -284,19 +338,20 @@ fn spriteVertex(
   let corner = spriteCorner(vertexIndex);
   let ndcPixel = vec2f(2.0 / render.viewport.x, 2.0 / render.viewport.y);
   let marker = smoothstep(0.948, 0.998, hash11(particle.seed * 17.17));
-  let node = step(0.997, hash11(particle.seed * 29.17));
-  let glint = step(0.989, hash11(particle.seed * 41.83));
+  let node = step(0.9997, hash11(particle.seed * 29.17));
+  let glint = step(0.982, hash11(particle.seed * 41.83));
   let energy = fieldEnergy(particle.position, render.time);
+  let pointerWake = (1.0 - smoothstep(0.02, 0.43, length(particle.position - render.pointer))) * render.pointerStrength;
   let pulse = 0.92 + sin(render.time * 1.8 + particle.seed * 0.031) * 0.08;
-  let radiusPixels = (0.42 + marker * (1.65 + energy * 1.7) + node * 3.8 + glint * 2.2) * pulse;
+  let radiusPixels = (0.42 + marker * (1.55 + energy * 1.45) + node * 0.8 + glint * 3.6 + pointerWake * 2.4) * pulse;
   let position = particle.position + corner * ndcPixel * radiusPixels;
   let mask = rightSideMask(particle.position);
 
   var out: VertexOut;
   out.position = vec4f(position, 0.0, 1.0);
   out.local = corner;
-  out.color = mix(vec3f(0.035, 0.038, 0.041), vec3f(0.58, 0.78, 0.9), glint);
-  out.alpha = render.opacity * mask * lifeFade(particle) * (marker * (0.14 + energy * 0.2) + node * 0.34 + glint * 0.2);
+  out.color = mix(vec3f(0.035, 0.038, 0.041), vec3f(0.46, 0.76, 0.94), max(glint, pointerWake * 0.52));
+  out.alpha = render.opacity * mask * lifeFade(particle) * (marker * (0.12 + energy * 0.17) + node * 0.05 + glint * 0.3 + pointerWake * 0.24);
   return out;
 }
 
@@ -459,17 +514,17 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
   let sourceIndex = 0
   let lastTime = 0
 
-  window.addEventListener(
+  canvas.addEventListener(
     'pointermove',
     (event) => {
       const rect = canvas.getBoundingClientRect()
       pointer.x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1
       pointer.y = (1 - (event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1
-      pointer.strength = 1
+      pointer.strength = 1.6
     },
     { passive: true },
   )
-  window.addEventListener(
+  canvas.addEventListener(
     'pointerleave',
     () => {
       pointer.strength = 0
@@ -526,11 +581,24 @@ export async function startFlowFieldRenderer(canvas: HTMLCanvasElement): Promise
     const deltaTime = lastTime > 0 ? seconds - lastTime : 1 / 60
     const aspect = canvas.width / Math.max(1, canvas.height)
     const motion = reducedMotion ? 0.28 : 1
-    pointer.strength *= 0.94
+    pointer.strength *= 0.985
     lastTime = seconds
 
     simUniforms.set([deltaTime, seconds, aspect, motion, pointer.x, pointer.y, pointer.strength, 0])
-    renderUniforms.set([seconds, aspect, 1, window.devicePixelRatio || 1, canvas.width, canvas.height, 0, 0])
+    renderUniforms.set([
+      seconds,
+      aspect,
+      1,
+      window.devicePixelRatio || 1,
+      canvas.width,
+      canvas.height,
+      pointer.x,
+      pointer.y,
+      pointer.strength,
+      1,
+      0,
+      0,
+    ])
     device.queue.writeBuffer(simBuffer, 0, simUniforms)
     device.queue.writeBuffer(renderBuffer, 0, renderUniforms)
 
@@ -705,12 +773,12 @@ function createInitialParticles(count: number): Float32Array {
     const seed = index * 0.61803398875 + 0.123
     const offset = index * FLOATS_PER_PARTICLE
     const depth = hash(seed * 7.41)
-    const lifetime = lerp(7.5, 15, hash(seed * 3.91))
+    const lifetime = lerp(10, 20, hash(seed * 3.91))
 
-    particles[offset] = lerp(-0.04, 1.28, hash(seed))
-    particles[offset + 1] = lerp(-0.9, 0.9, hash(seed * 2.31))
-    particles[offset + 2] = lerp(0.02, 0.13, hash(seed * 3.73))
-    particles[offset + 3] = lerp(-0.06, 0.06, hash(seed * 5.19))
+    particles[offset] = lerp(-0.52, 1.36, hash(seed))
+    particles[offset + 1] = lerp(-1.08, 1.05, hash(seed * 2.31))
+    particles[offset + 2] = lerp(0.03, 0.15, hash(seed * 3.73))
+    particles[offset + 3] = lerp(-0.07, 0.07, hash(seed * 5.19))
     particles[offset + 4] = seed
     particles[offset + 5] = depth
     particles[offset + 6] = hash(seed * 11.7) * lifetime
