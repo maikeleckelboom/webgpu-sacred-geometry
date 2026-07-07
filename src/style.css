@@ -1,0 +1,389 @@
+:root {
+  color-scheme: dark;
+  background: #000;
+  font: 15px/1.4 system-ui, "Segoe UI", Roboto, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(15, 28, 54, 0.16), transparent 34rem),
+    #000;
+}
+
+#app {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+#mandala {
+  width: min(100vw, 100svh);
+  height: min(100vw, 100svh);
+  display: block;
+  background: #000;
+}
+
+#status {
+  position: absolute;
+  inset: auto 1rem 1rem 1rem;
+  max-width: 38rem;
+  margin: 0 auto;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid rgba(80, 180, 255, 0.36);
+  border-radius: 6px;
+  color: #d9efff;
+  background: rgba(4, 10, 20, 0.86);
+  box-shadow: 0 0 28px rgba(44, 148, 255, 0.22);
+}
+
+body.flow-page-body {
+  overflow: auto;
+  color: #050505;
+  color-scheme: light;
+  background: #f8f8f5;
+}
+
+body.flow-page-body *,
+body.flow-page-body *::before,
+body.flow-page-body *::after {
+  box-sizing: border-box;
+}
+
+body.flow-page-body #app {
+  display: block;
+  min-height: 100%;
+  place-items: initial;
+}
+
+.flow-page {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  min-height: 100svh;
+  overflow: hidden;
+  background: #f8f8f5;
+  grid-template-rows: 4.7rem minmax(0, 1fr) auto;
+}
+
+.flow-page::before {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(248, 248, 245, 0.995) 0%, rgba(248, 248, 245, 0.985) 38%, rgba(248, 248, 245, 0.76) 51%, rgba(248, 248, 245, 0.18) 72%, transparent 86%);
+  content: "";
+}
+
+.flow-canvas {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.2) 18%, #000 38%);
+}
+
+.flow-header {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  align-items: center;
+  width: min(100%, 88rem);
+  margin: 0 auto;
+  padding: 0 clamp(1.4rem, 5vw, 3.8rem);
+  border-bottom: 1px solid rgba(12, 16, 20, 0.1);
+  grid-template-columns: 1fr auto;
+}
+
+.flow-brand,
+.flow-nav__link,
+.flow-nav__button,
+.flow-action {
+  color: inherit;
+  text-decoration: none;
+}
+
+.flow-brand {
+  font-size: clamp(0.95rem, 1vw, 1.08rem);
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.flow-nav {
+  display: flex;
+  align-items: center;
+  gap: clamp(1.15rem, 2.2vw, 2rem);
+  font-size: 0.98rem;
+}
+
+.flow-nav__link {
+  position: relative;
+  display: inline-flex;
+  min-height: 2.2rem;
+  align-items: center;
+  color: rgba(8, 10, 12, 0.66);
+}
+
+.flow-nav__link.is-active {
+  color: #060606;
+}
+
+.flow-nav__link.is-active::after {
+  position: absolute;
+  right: 0;
+  bottom: 0.12rem;
+  left: 0;
+  height: 2px;
+  background: #344258;
+  content: "";
+}
+
+.flow-nav__button {
+  display: inline-flex;
+  min-height: 2.55rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1.1rem;
+  border: 1px solid rgba(10, 12, 14, 0.13);
+  background: rgba(255, 255, 255, 0.42);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.72) inset;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 0.88rem;
+  letter-spacing: 0.04em;
+}
+
+.flow-hero {
+  position: relative;
+  z-index: 2;
+  width: min(100%, 88rem);
+  margin: 0 auto;
+  padding: clamp(2.2rem, 6vh, 5.2rem) clamp(1.4rem, 5vw, 3.8rem) clamp(1.5rem, 3vh, 2.4rem);
+}
+
+.flow-kicker {
+  max-width: 43rem;
+  margin: 0 0 clamp(1.5rem, 3.2vh, 2.4rem);
+  color: rgba(6, 8, 10, 0.48);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: clamp(0.74rem, 0.9vw, 0.86rem);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.flow-hero h1 {
+  max-width: 44rem;
+  margin: 0;
+  color: #050505;
+  font-size: clamp(2.8rem, 4.25vw, 4.7rem);
+  font-weight: 450;
+  letter-spacing: 0;
+  line-height: 1.06;
+}
+
+.flow-subtitle {
+  max-width: 44rem;
+  margin: clamp(1.1rem, 2.2vh, 1.8rem) 0 0;
+  color: rgba(7, 9, 11, 0.66);
+  font-size: clamp(1rem, 1.3vw, 1.18rem);
+  line-height: 1.65;
+}
+
+.flow-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.45rem;
+  align-items: center;
+  margin-top: clamp(1.5rem, 3.2vh, 2.4rem);
+}
+
+.flow-action {
+  display: inline-flex;
+  min-height: 3.7rem;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.flow-action--primary {
+  min-width: 10.5rem;
+  padding: 0 1.35rem;
+  color: #fff;
+  background: #050505;
+  box-shadow: 0 1.35rem 2.2rem rgba(0, 0, 0, 0.12);
+}
+
+.flow-action--secondary {
+  min-width: 11.5rem;
+  justify-content: flex-start;
+  border-bottom: 1px solid rgba(8, 10, 12, 0.12);
+  color: rgba(5, 6, 7, 0.88);
+}
+
+.flow-cards {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  border-top: 1px solid rgba(10, 12, 14, 0.1);
+  background: rgba(248, 248, 245, 0.88);
+  backdrop-filter: blur(10px);
+  grid-template-columns:
+    minmax(clamp(1.4rem, 5vw, 3.8rem), 1fr)
+    repeat(4, minmax(12rem, 22rem))
+    minmax(clamp(1.4rem, 5vw, 3.8rem), 1fr);
+}
+
+.flow-card {
+  min-height: 12.2rem;
+  padding: 2.25rem 2rem 2.1rem;
+  border-left: 1px solid rgba(10, 12, 14, 0.1);
+}
+
+.flow-card:first-child {
+  grid-column: 2;
+}
+
+.flow-card:last-child {
+  border-right: 1px solid rgba(10, 12, 14, 0.1);
+}
+
+.flow-card p {
+  margin: 0 0 1.25rem;
+  color: #344258;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.flow-card h2 {
+  margin: 0;
+  color: rgba(5, 6, 7, 0.68);
+  font-size: clamp(1.02rem, 1.15vw, 1.18rem);
+  font-weight: 450;
+  letter-spacing: 0;
+  line-height: 1.55;
+}
+
+.flow-status {
+  position: fixed;
+  z-index: 4;
+  right: 1rem;
+  bottom: 1rem;
+  max-width: min(34rem, calc(100vw - 2rem));
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(12, 16, 20, 0.14);
+  color: #151515;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.12);
+}
+
+@media (max-width: 980px) {
+  .flow-page {
+    min-height: auto;
+    grid-template-rows: auto auto auto;
+  }
+
+  .flow-canvas {
+    height: 44rem;
+    mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.75) 68%, transparent 100%);
+  }
+
+  .flow-header {
+    min-height: 4.7rem;
+  }
+
+  .flow-nav {
+    gap: 1rem;
+  }
+
+  .flow-nav__link:nth-child(2),
+  .flow-nav__link:nth-child(3) {
+    display: none;
+  }
+
+  .flow-hero {
+    padding-top: clamp(4rem, 12vh, 7rem);
+  }
+
+  .flow-hero h1,
+  .flow-subtitle,
+  .flow-kicker {
+    max-width: 40rem;
+  }
+
+  .flow-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .flow-card,
+  .flow-card:first-child {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .flow-header {
+    grid-template-columns: 1fr auto;
+  }
+
+  .flow-nav__link {
+    display: none;
+  }
+
+  .flow-nav__button {
+    min-height: 2.35rem;
+    padding: 0 0.85rem;
+  }
+
+  .flow-hero {
+    padding-bottom: 2.5rem;
+  }
+
+  .flow-hero h1 {
+    font-size: clamp(2.5rem, 14vw, 4rem);
+  }
+
+  .flow-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .flow-action,
+  .flow-action--primary,
+  .flow-action--secondary {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .flow-action--secondary {
+    justify-content: center;
+  }
+
+  .flow-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .flow-card {
+    min-height: auto;
+    padding: 1.65rem 1.4rem;
+    border-right: 0;
+  }
+}
