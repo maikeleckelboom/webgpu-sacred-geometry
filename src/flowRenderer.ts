@@ -1,7 +1,7 @@
 const PARTICLE_COUNT = 72000;
 const WORKGROUP_SIZE = 64;
 const FLOATS_PER_PARTICLE = 12;
-const UNIFORM_FLOATS = 16;
+const UNIFORM_FLOATS = 24;
 const TRAIL_DECAY = 0.965;
 
 const BLOOM_LEVELS = 5;
@@ -624,6 +624,11 @@ struct Render {
   exposure: f32,
   shadingStrength: f32,
   pressure: f32,
+  modeFlow: f32,
+  modeMandala: f32,
+  modeTopo: f32,
+  modeArch: f32,
+  modeWaves: f32,
 }
 
 struct VertexOut {
@@ -691,6 +696,164 @@ fn ridge2(uv: vec2f, time: f32) -> f32 {
   return pow(r, 7.0);
 }
 
+// === Flow-field helpers (mirrored from the compute shader) ===
+// The compute shader and post shader are separate WGSL modules, so the
+// field math is duplicated here. snoise2 is identical to the compute
+// shader's snoise, and render.* uniforms replace sim.* uniforms. This
+// lets the star field sample through the SAME flow field that drives the
+// particle system instead of being a static screen-space overlay.
+
+const GOLDEN_ANGLE = 2.39996322972865332;
+
+fn curlNoise2D(point: vec2f, time: f32) -> vec2f {
+  let pT = point + vec2f(time * 0.08, -time * 0.06);
+  let eps = 0.08;
+  let n1 = snoise2(pT + vec2f(0.0, eps));
+  let n2 = snoise2(pT - vec2f(0.0, eps));
+  let n3 = snoise2(pT + vec2f(eps, 0.0));
+  let n4 = snoise2(pT - vec2f(eps, 0.0));
+  return vec2f((n1 - n2), -(n3 - n4)) / (2.0 * eps);
+}
+
+fn vortex(point: vec2f, center: vec2f, strength: f32) -> vec2f {
+  let d = point - center;
+  let r2 = dot(d, d) + 0.0009;
+  return strength * vec2f(-d.y, d.x) / r2;
+}
+
+fn goldenLattice(point: vec2f, time: f32) -> vec2f {
+  var acc = vec2f(0.0);
+  for (var i = 1u; i <= 11u; i = i + 1u) {
+    let fi = f32(i);
+    let angle = fi * GOLDEN_ANGLE + time * 0.05;
+    let radius = sqrt(fi) * 0.135;
+    let c = vec2f(cos(angle), sin(angle)) * radius;
+    let d = point - c;
+    let r2 = dot(d, d) + 0.045;
+    let orbit = vec2f(-d.y, d.x) / r2 * 0.18;
+    let breathe = 0.6 + 0.4 * sin(time * 0.3 + fi * 1.7);
+    acc += orbit * breathe;
+  }
+  return acc;
+}
+
+fn auroraShear(point: vec2f, time: f32) -> vec2f {
+  let p2 = point + curlNoise2D(point * 1.7, time) * 0.18;
+  let shear = vec2f(
+    sin(p2.y * 3.0 + time * 0.2),
+    cos(p2.x * 1.5 + time * 0.1),
+  );
+  return shear * 0.12;
+}
+
+fn fieldModeFlow(point: vec2f, time: f32) -> vec2f {
+  let fieldShift = vec2f(0.24, 0.0);
+  let p = point - fieldShift;
+  let c1 = vec2f(0.24 + sin(time * 0.08) * 0.08, -0.04 + cos(time * 0.10) * 0.06);
+  let c2 = vec2f(0.78 + cos(time * 0.12) * 0.06, 0.34 + sin(time * 0.09) * 0.05);
+  let c3 = vec2f(0.04 + sin(time * 0.07) * 0.08, 0.55 + cos(time * 0.11) * 0.04);
+  var f = curlNoise2D(p * 1.3, time) * 0.22;
+  f += auroraShear(p, time);
+  f += vortex(point, c1, 0.80) * 0.014;
+  f += vortex(point, c2, -0.45) * 0.015;
+  f += vortex(point, c3, 0.30) * 0.013;
+  f += goldenLattice(p, time) * 0.55;
+  return f;
+}
+
+fn fieldModeMandala(point: vec2f, time: f32) -> vec2f {
+  let r = length(point) + 0.001;
+  let theta = atan2(point.y, point.x);
+  let pulse = 0.5 + 0.5 * sin(r * 7.5 - time * 0.45);
+  let radial = -normalize(point) * (0.045 + 0.025 * sin(time * 0.3));
+  let tangent = vec2f(-point.y, point.x) / r * 0.14 * pulse;
+  let symmetry = vec2f(
+    cos(theta * 6.0 + time * 0.2),
+    sin(theta * 6.0 + time * 0.2),
+  ) * 0.05;
+  let rings = curlNoise2D(point * 2.4, time) * 0.04;
+  return radial + tangent + symmetry + rings;
+}
+
+fn fieldModeTopography(point: vec2f, time: f32) -> vec2f {
+  let r = length(point) + 0.001;
+  let bands = sin(r * 6.0 - time * 0.3);
+  let tangent = vec2f(-point.y, point.x) / r * 0.10 * bands;
+  let drift = curlNoise2D(point * 2.0, time * 0.5) * 0.05;
+  return tangent + drift;
+}
+
+fn fieldModeArchitecture(point: vec2f, time: f32) -> vec2f {
+  let snapX = -point.x * smoothstep(0.0, 0.4, abs(point.x) - 0.05);
+  let snapY = -point.y * smoothstep(0.0, 0.4, abs(point.y) - 0.05);
+  let tangent = vec2f(-point.y, point.x) * 0.03;
+  let breathe = 0.85 + 0.15 * sin(time * 0.4);
+  return vec2f(snapX, snapY) * 0.55 * breathe + tangent;
+}
+
+fn fieldModeWaves(point: vec2f, time: f32) -> vec2f {
+  let phase = point.x * 4.0 - time * 0.6;
+  let phase2 = point.y * 3.0 + time * 0.4;
+  let wave = vec2f(cos(phase) * 0.20, sin(phase2) * 0.10);
+  let swell = curlNoise2D(point * 0.6, time) * 0.04;
+  return wave + swell;
+}
+
+// Combined field at a point, weighted by the active mode blend. Only the
+// active mode(s) are evaluated for fragment-shader performance.
+fn flowFieldAt(point: vec2f, time: f32) -> vec2f {
+  var f = vec2f(0.0);
+  if (render.modeFlow > 0.01) {
+    f += render.modeFlow * fieldModeFlow(point, time);
+  }
+  if (render.modeMandala > 0.01) {
+    f += render.modeMandala * fieldModeMandala(point, time);
+  }
+  if (render.modeTopo > 0.01) {
+    f += render.modeTopo * fieldModeTopography(point, time);
+  }
+  if (render.modeArch > 0.01) {
+    f += render.modeArch * fieldModeArchitecture(point, time);
+  }
+  if (render.modeWaves > 0.01) {
+    f += render.modeWaves * fieldModeWaves(point, time);
+  }
+  return f;
+}
+
+// Pointer influence — same math as the compute shader's mouseField,
+// reading from the post-shader render uniform struct.
+fn flowMouseField(point: vec2f) -> vec2f {
+  if (render.pointerStrength < 0.001) {
+    return vec2f(0.0);
+  }
+  let d = render.pointer - point;
+  let r = length(d) + 0.001;
+  let toward = d / r;
+  let tangent = vec2f(-toward.y, toward.x);
+  let radius = 0.45 + render.pressure * 0.35;
+  let falloff = (1.0 - smoothstep(0.02, radius, r)) * render.pointerStrength;
+  let core = 1.0 - smoothstep(0.0, 0.08, r);
+  let charge = 1.0 + render.pressure * ${PRESSURE_SWIRL_BOOST.toFixed(2)};
+  return (tangent * falloff * 0.18 + toward * falloff * 0.04 - toward * core * render.pointerStrength * 0.1) * charge;
+}
+
+// The single reusable flow helper: combines the active field mode(s) and
+// the pointer influence into one velocity-like vector in field/NDC space.
+// Stars are sampled through a coordinate system warped by this vector so
+// they feel like dust/embers caught in the same cosmic flow as the main
+// particle effect.
+fn flowVector(point: vec2f, time: f32) -> vec2f {
+  return flowFieldAt(point, time) + flowMouseField(point);
+}
+
+// Star field sampled through a flow-warped coordinate system.
+// Stars are no longer placed from raw screen UV; the UV is displaced by
+// the same flow vector that drives the particle system plus a pointer
+// lensing term. Local flow energy and pointer proximity modulate
+// brightness, twinkle energy and directional streaking. This makes the
+// field feel physically embedded in the flow scene rather than being a
+// static screen-space overlay.
 fn skyColor(uv: vec2f, time: f32) -> vec3f {
   let vertical = smoothstep(0.0, 1.0, uv.y);
   var color = mix(vec3f(0.0006, 0.0009, 0.002), vec3f(0.0025, 0.008, 0.0065), vertical);
@@ -702,14 +865,35 @@ fn skyColor(uv: vec2f, time: f32) -> vec3f {
   color += vec3f(0.022, 0.008, 0.04) * max(nebula, 0.0) * smoothstep(0.15, 0.92, uv.y);
   color += vec3f(0.005, 0.028, 0.022) * max(-nebula, 0.0) * smoothstep(0.1, 0.95, uv.y);
 
-  // Star layers: two densities for variety. Each star gets its own random
-  // frequency, two twinkle octaves, a rare flare, a random hue, and its
-  // own brightness so the sky never beats in a pattern.
-  let starDomain = uv * vec2f(280.0, 160.0);
+  // --- Flow-coupled star field ---
+  // Map screen UV to the same field/NDC space the particles and pointer
+  // live in, then sample the shared flow vector there.
+  let fieldCoord = uv * 2.0 - 1.0;
+  let flow = flowVector(fieldCoord, time);
+  let energy = length(flow);
+  let energyN = clamp(energy * 3.0, 0.0, 1.0);
+
+  // Pointer lensing: a gentle gravitational bend that pulls star positions
+  // toward the pointer, separate from the flow warp. Widens with pressure.
+  let toPointer = render.pointer - fieldCoord;
+  let pointerDist = length(toPointer) + 0.001;
+  let pointerDir = toPointer / pointerDist;
+  let lensRadius = 0.4 + render.pressure * 0.3;
+  let pointerProx = 1.0 - smoothstep(0.02, lensRadius, pointerDist);
+  let pointerWarp = pointerDir * pointerProx * render.pointerStrength * 0.006;
+
+  // Flow warp: displace the star sampling domain by the local flow vector
+  // (converted from field space to UV space). Subtle enough that stars
+  // keep their stable identity but drift and breathe with the field.
+  let flowWarp = flow * 0.5 * 0.015;
+  let warpedUv = uv + flowWarp + pointerWarp;
+
+  // Two density layers for variety (preserved). Each star gets its own
+  // random frequency, two twinkle octaves, a rare flare, a random hue,
+  // and its own brightness so the sky never beats in a pattern.
+  let starDomain = warpedUv * vec2f(280.0, 160.0);
   let starGrid = floor(starDomain);
   let starLocal = fract(starDomain) - vec2f(0.5);
-  let starShape = exp(-dot(starLocal, starLocal) * 92.0);
-  let brightStarShape = exp(-dot(starLocal, starLocal) * 48.0);
   let cellRand = hash21(starGrid);
   let phase = hash21(starGrid + vec2f(7.3, 2.1)) * 6.2831;
   let freqSlow = 0.35 + hash21(starGrid + vec2f(3.7, 9.2)) * 1.45;
@@ -718,18 +902,45 @@ fn skyColor(uv: vec2f, time: f32) -> vec3f {
   let star = step(0.99762, cellRand);
   let brightStar = step(0.99937, cellRand);
 
+  // Twinkle: per-cell random phase and two octaves (preserved), energized
+  // by pointer proximity so nearby stars shimmer more during interaction.
   let slow = sin(time * freqSlow + phase);
   let fast = sin(time * freqFast + phase * 1.7 + 2.1);
   var twinkle = 0.42 + 0.4 * slow + 0.16 * fast;
   let flarePhase = sin(time * (freqSlow * 0.43) + phase * 0.27);
   twinkle = twinkle + pow(max(0.0, flarePhase), 26.0) * 0.55;
+  let pointerTwinkle = 1.0 + pointerProx * render.pointerStrength * 0.6;
 
+  // Per-star color variation (teal-to-warm and blue-to-gold, preserved).
   let hueShift = hash21(starGrid + vec2f(1.2, 8.8));
   let starColor = mix(vec3f(0.58, 0.88, 0.78), vec3f(1.0, 0.95, 0.82), hueShift);
   let brightStarColor = mix(vec3f(0.7, 0.95, 1.0), vec3f(1.0, 0.92, 0.7), hash21(starGrid + vec2f(9.9, 0.3)));
 
-  color += starColor * star * starShape * clamp(twinkle, 0.0, 1.4) * brightness * 0.34 * smoothstep(0.25, 0.98, uv.y);
-  color += brightStarColor * brightStar * brightStarShape * clamp(twinkle * 1.2, 0.0, 1.6) * 0.56 * smoothstep(0.2, 0.98, uv.y);
+  // Normal stars stay mostly point-like.
+  let starShape = exp(-dot(starLocal, starLocal) * 92.0);
+
+  // Bright stars become flow-aligned glints: the Gaussian is stretched
+  // along the local flow direction (expressed in cell space so the
+  // orientation matches the screen). Stretch grows with flow energy and
+  // pointer proximity/wake so bright stars streak visibly near activity.
+  let flowCellDir = normalize(vec2f(flow.x * 280.0, flow.y * 160.0) + vec2f(0.001, 0.001));
+  let perpCellDir = vec2f(-flowCellDir.y, flowCellDir.x);
+  let along = dot(starLocal, flowCellDir);
+  let across = dot(starLocal, perpCellDir);
+  let streakLen = 1.0 + energyN * 1.8 + pointerProx * render.pointerStrength * 1.2;
+  let streakSq = streakLen * streakLen;
+  let brightStarShape = exp(-(along * along * (48.0 / streakSq) + across * across * 48.0));
+
+  // Energy + pointer brightness modulation. Stars near stronger flow or
+  // pointer activity become brighter. Avoids global pulsing because the
+  // energy varies spatially with the flow, not uniformly across the sky.
+  let energyBright = 1.0 + energyN * 0.45;
+  let pointerBright = 1.0 + pointerProx * render.pointerStrength * 0.7;
+  let vertFade = smoothstep(0.25, 0.98, uv.y);
+  let vertFadeBright = smoothstep(0.2, 0.98, uv.y);
+
+  color += starColor * star * starShape * clamp(twinkle * pointerTwinkle, 0.0, 1.6) * brightness * 0.34 * energyBright * pointerBright * vertFade;
+  color += brightStarColor * brightStar * brightStarShape * clamp(twinkle * 1.2 * pointerTwinkle, 0.0, 1.8) * 0.56 * energyBright * pointerBright * vertFadeBright;
 
   return color;
 }
@@ -1409,6 +1620,14 @@ export async function startFlowFieldRenderer(
       BLOOM_EXPOSURE,
       BLOOM_SHADING,
       pointer.pressure,
+      currentWeights[0],
+      currentWeights[1],
+      currentWeights[2],
+      currentWeights[3],
+      currentWeights[4],
+      0,
+      0,
+      0,
       0,
       0,
       0,
