@@ -371,24 +371,34 @@ fn skyColor(uv: vec2f, time: f32) -> vec3f {
 
 fn lightSkyColor(uv: vec2f, time: f32) -> vec3f {
   let vertical = smoothstep(0.0, 1.0, uv.y);
-  var color = mix(vec3f(0.91, 0.94, 0.91), vec3f(0.81, 0.91, 0.89), vertical);
+  var color = mix(vec3f(0.93, 0.96, 0.94), vec3f(0.86, 0.93, 0.91), vertical);
 
   let n1 = snoise2(uv * vec2f(2.1, 1.4) + vec2f(time * 0.013, -time * 0.009));
   let n2 = snoise2(uv * vec2f(3.4, 2.3) + vec2f(-time * 0.017, time * 0.011 + 4.7));
   let nebula = n1 * 0.6 + n2 * 0.4;
-  color += vec3f(0.018, 0.026, 0.016) * max(nebula, 0.0) * smoothstep(0.08, 0.92, uv.y);
-  color -= vec3f(0.024, 0.018, 0.012) * max(-nebula, 0.0) * smoothstep(0.12, 0.95, uv.y);
+  color += vec3f(0.012, 0.018, 0.014) * max(nebula, 0.0) * smoothstep(0.08, 0.92, uv.y);
+  color -= vec3f(0.014, 0.018, 0.014) * max(-nebula, 0.0) * smoothstep(0.12, 0.95, uv.y);
 
   let fieldCoord = uv * 2.0 - 1.0;
   let flow = flowVector(fieldCoord, time);
   let flowEnergy = clamp(length(flow) * 4.2, 0.0, 1.0);
   let contour = ridge(uv + flow * 0.025, time) * 0.45 + ridge2(uv * vec2f(1.0, 1.1) + flow * 0.018 + vec2f(13.7, 7.1), time) * 0.32;
-  color -= vec3f(0.024, 0.052, 0.05) * contour * (0.22 + flowEnergy * 0.78);
-  color += vec3f(0.026, 0.046, 0.04) * flowEnergy * smoothstep(0.18, 0.96, uv.y) * 0.18;
+  color -= vec3f(0.004, 0.016, 0.015) * contour * (0.05 + flowEnergy * 0.32);
+  color += vec3f(0.012, 0.024, 0.02) * flowEnergy * smoothstep(0.18, 0.96, uv.y) * 0.04;
 
-  let paper = hash21(uv * vec2f(740.0, 420.0) + vec2f(time * 0.7, 0.0)) - 0.5;
-  color += paper * 0.008;
+  let paper = hash21(uv * vec2f(860.0, 520.0) + vec2f(time * 0.35, 0.0)) - 0.5;
+  color += paper * 0.006;
   return clamp(color, vec3f(0.0), vec3f(1.0));
+}
+
+fn sketchStripe(uv: vec2f, direction: vec2f, scale: f32, width: f32, phase: f32) -> f32 {
+  let dir = normalize(direction + vec2f(0.0001, 0.0002));
+  let normal = vec2f(-dir.y, dir.x);
+  let p = vec2f(uv.x * render.aspect, uv.y);
+  let jitter = snoise2(uv * vec2f(28.0, 19.0) + vec2f(phase, -phase * 0.6)) * 0.18;
+  let coordinate = dot(p, normal) * scale + jitter + phase;
+  let stripe = abs(fract(coordinate) - 0.5);
+  return 1.0 - smoothstep(width * 0.45, width, stripe);
 }
 
 fn linearToGamma(c: vec3f) -> vec3f {
@@ -499,27 +509,41 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
   let noise = (hash21(input.uv * render.viewport + vec2f(render.time * 17.0, 0.0)) - 0.5) / 255.0;
 
   if (render.themeLight > 0.5) {
-    let flowPaint = base * 0.96 + bloomLit * vec3f(0.52, 0.82, 0.74) * 0.42 + causticLit * 0.58 + chargeGlow * 0.34 + pressureGlow * 0.4;
-    let paintEnergy = clamp(length(flowPaint) * 0.52 + dyeMag * 0.18 + particleHalo * 0.18, 0.0, 1.0);
-    let inkBody = smoothstep(0.006, 0.34, dyeMag);
-    let haloBody = smoothstep(0.012, 0.5, particleHalo + length(bloomLit) * 0.22);
-    let cyanInk = vec3f(0.018, 0.22, 0.25);
-    let greenInk = vec3f(0.0, 0.34, 0.3);
-    let violetInk = vec3f(0.22, 0.18, 0.42);
-    let flowHue = clamp(length(base.gb) * 0.12 + r1 * 0.22 + r2 * 0.18, 0.0, 1.0);
+    let px = 1.0 / max(render.viewport, vec2f(1.0, 1.0));
+    let fieldCoord = input.uv * 2.0 - 1.0;
+    let flow = flowVector(fieldCoord, render.time);
+    let flowDir = normalize(flow + vec2f(0.001, 0.002));
+    let energy = clamp(dyeMag * 1.05 + particleHalo * 0.22 + length(bloomLit) * 0.07, 0.0, 1.0);
+    let energyBody = smoothstep(0.035, 0.5, energy);
+    let fineBody = smoothstep(0.014, 0.34, dyeMag + particleHalo * 0.12);
+    let energyCore = smoothstep(0.18, 0.96, energy);
+    let dx = abs(accumulationEnergy(input.uv + vec2f(px.x * 1.4, 0.0)) - accumulationEnergy(input.uv - vec2f(px.x * 1.4, 0.0)));
+    let dy = abs(accumulationEnergy(input.uv + vec2f(0.0, px.y * 1.4)) - accumulationEnergy(input.uv - vec2f(0.0, px.y * 1.4)));
+    let dd = abs(accumulationEnergy(input.uv + px * 1.7) - accumulationEnergy(input.uv - px * 1.7));
+    let edgeLine = smoothstep(0.035, 0.36, dx + dy + dd * 0.8 + particleHalo * 0.035);
+    let orbitHatch = sketchStripe(input.uv + flow * 0.018, flowDir, 96.0, 0.06, render.time * 0.018);
+    let crossHatch = sketchStripe(input.uv - flow * 0.01, vec2f(flowDir.y, -flowDir.x), 63.0, 0.045, -render.time * 0.014 + 2.3);
+    let longHatch = sketchStripe(input.uv + flow * 0.026, flowDir + vec2f(0.24, -0.16), 138.0, 0.035, render.time * 0.012 + 5.1);
+    let broken = 0.58 + 0.42 * hash21(floor(input.uv * vec2f(210.0, 130.0)) + vec2f(11.0, 29.0));
+    let strokeBody = (orbitHatch * 0.74 + crossHatch * 0.2 + longHatch * 0.3) * energyBody * fineBody * broken;
+    let coreBreak = 1.0 - smoothstep(0.48, 0.98, energyCore) * 0.32;
+    let strokeMask = clamp(edgeLine * 0.58 + strokeBody * coreBreak + r1 * edgeLine * 0.12, 0.0, 0.88);
+    let ghostLine = clamp(sketchStripe(input.uv + flow * 0.04, flowDir, 42.0, 0.035, 8.0) * smoothstep(0.12, 0.72, particleHalo) * 0.08, 0.0, 0.08);
+    let cyanInk = vec3f(0.018, 0.24, 0.29);
+    let greenInk = vec3f(0.0, 0.34, 0.31);
+    let violetInk = vec3f(0.24, 0.2, 0.42);
+    let flowHue = clamp(length(base.gb) * 0.11 + r1 * 0.24 + r2 * 0.16, 0.0, 1.0);
     var ink = mix(cyanInk, greenInk, flowHue);
-    ink = mix(ink, violetInk, smoothstep(0.34, 0.96, bloomLit.b + causticLit.b * 0.5) * 0.34);
-
+    ink = mix(ink, violetInk, smoothstep(0.24, 0.82, bloomLit.b + causticLit.b * 0.42) * 0.24);
     var lightColor = lightSkyColor(input.uv, render.time);
-    lightColor += vec3f(0.0, 0.28, 0.26) * haloBody * 0.1;
-    lightColor += vec3f(0.22, 0.17, 0.48) * r2 * haloBody * 0.05;
-    lightColor += vec3f(0.67, 0.48, 0.16) * pressure * render.pointerStrength * particleHalo * 0.07;
-    lightColor = mix(lightColor, ink, clamp(inkBody * 0.78 + paintEnergy * 0.28 + haloBody * 0.12, 0.0, 0.9));
-    lightColor -= vec3f(0.0, 0.08, 0.07) * particleCore * 0.07;
-    lightColor += noise * 0.65;
+    lightColor -= vec3f(0.035, 0.11, 0.1) * ghostLine;
+    lightColor = mix(lightColor, ink, strokeMask * 0.98);
+    lightColor += vec3f(0.02, 0.08, 0.07) * edgeLine * energyBody * 0.08;
+    lightColor += vec3f(0.58, 0.42, 0.16) * pressure * render.pointerStrength * edgeLine * 0.04;
+    lightColor += noise * 0.78;
 
     let edge = smoothstep(0.55, 1.24, length((input.uv - vec2f(0.5)) * vec2f(render.aspect, 1.0)));
-    lightColor = mix(lightColor, lightColor * vec3f(0.96, 0.98, 0.97), edge * 0.3);
+    lightColor = mix(lightColor, lightColor * vec3f(0.97, 0.985, 0.98), edge * 0.26);
     return vec4f(linearToGamma(clamp(lightColor, vec3f(0.0), vec3f(1.0))), 1.0);
   }
 
