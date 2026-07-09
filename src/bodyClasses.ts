@@ -1,5 +1,4 @@
 const pageBodyClasses = [
-  "mandala-page-body",
   "flow-page-body",
   "aurora-page-body",
   "topography-page-body",

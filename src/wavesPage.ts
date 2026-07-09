@@ -16,7 +16,7 @@ export function mountWavesPage(root: HTMLDivElement): PageHandle {
     description:
       "A high-key canvas study of warped streamlines, narrow segment quads, and paper-like contrast.",
     actions: [
-      { href: "/", label: "Open mandala", variant: "primary" },
+      { href: "/flow-field", label: "Open flow field", variant: "primary" },
       { href: "/topography", label: "View topography", variant: "secondary" },
     ],
   });

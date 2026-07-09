@@ -1,4 +1,4 @@
-const PARTICLE_COUNT = 72000;
+const PARTICLE_COUNT = 36000;
 const WORKGROUP_SIZE = 64;
 const FLOATS_PER_PARTICLE = 12;
 const UNIFORM_FLOATS = 24;
@@ -34,9 +34,9 @@ export type FieldMode = "flow" | "topo" | "arch" | "waves";
 
 const MODE_INDEX: Record<FieldMode, number> = {
   flow: 0,
-  topo: 1,
-  arch: 2,
-  waves: 3,
+  topo: 2,
+  arch: 3,
+  waves: 4,
 };
 
 const computeShader = /* wgsl */ `
@@ -65,7 +65,7 @@ struct Sim {
   pointer: vec2f,
   pointerStrength: f32,
   modeFlow: f32,
-  modeMandala: f32,
+  modeReserved: f32,
   modeTopo: f32,
   modeArch: f32,
   modeWaves: f32,
@@ -173,20 +173,6 @@ fn fieldModeFlow(point: vec2f, time: f32) -> vec2f {
   return f;
 }
 
-fn fieldModeMandala(point: vec2f, time: f32) -> vec2f {
-  let r = length(point) + 0.001;
-  let theta = atan2(point.y, point.x);
-  let pulse = 0.5 + 0.5 * sin(r * 7.5 - time * 0.45);
-  let radial = -normalize(point) * (0.045 + 0.025 * sin(time * 0.3));
-  let tangent = vec2f(-point.y, point.x) / r * 0.14 * pulse;
-  let symmetry = vec2f(
-    cos(theta * 6.0 + time * 0.2),
-    sin(theta * 6.0 + time * 0.2),
-  ) * 0.05;
-  let rings = curlNoise2D(point * 2.4, time) * 0.04;
-  return radial + tangent + symmetry + rings;
-}
-
 fn fieldModeTopography(point: vec2f, time: f32) -> vec2f {
   let r = length(point) + 0.001;
   let bands = sin(r * 6.0 - time * 0.3);
@@ -213,7 +199,6 @@ fn fieldModeWaves(point: vec2f, time: f32) -> vec2f {
 
 fn fieldAt(point: vec2f, time: f32) -> vec2f {
   return sim.modeFlow * fieldModeFlow(point, time)
-       + sim.modeMandala * fieldModeMandala(point, time)
        + sim.modeTopo * fieldModeTopography(point, time)
        + sim.modeArch * fieldModeArchitecture(point, time)
        + sim.modeWaves * fieldModeWaves(point, time);
@@ -625,7 +610,7 @@ struct Render {
   shadingStrength: f32,
   pressure: f32,
   modeFlow: f32,
-  modeMandala: f32,
+  modeReserved: f32,
   modeTopo: f32,
   modeArch: f32,
   modeWaves: f32,
@@ -761,20 +746,6 @@ fn fieldModeFlow(point: vec2f, time: f32) -> vec2f {
   return f;
 }
 
-fn fieldModeMandala(point: vec2f, time: f32) -> vec2f {
-  let r = length(point) + 0.001;
-  let theta = atan2(point.y, point.x);
-  let pulse = 0.5 + 0.5 * sin(r * 7.5 - time * 0.45);
-  let radial = -normalize(point) * (0.045 + 0.025 * sin(time * 0.3));
-  let tangent = vec2f(-point.y, point.x) / r * 0.14 * pulse;
-  let symmetry = vec2f(
-    cos(theta * 6.0 + time * 0.2),
-    sin(theta * 6.0 + time * 0.2),
-  ) * 0.05;
-  let rings = curlNoise2D(point * 2.4, time) * 0.04;
-  return radial + tangent + symmetry + rings;
-}
-
 fn fieldModeTopography(point: vec2f, time: f32) -> vec2f {
   let r = length(point) + 0.001;
   let bands = sin(r * 6.0 - time * 0.3);
@@ -805,9 +776,6 @@ fn flowFieldAt(point: vec2f, time: f32) -> vec2f {
   var f = vec2f(0.0);
   if (render.modeFlow > 0.01) {
     f += render.modeFlow * fieldModeFlow(point, time);
-  }
-  if (render.modeMandala > 0.01) {
-    f += render.modeMandala * fieldModeMandala(point, time);
   }
   if (render.modeTopo > 0.01) {
     f += render.modeTopo * fieldModeTopography(point, time);
