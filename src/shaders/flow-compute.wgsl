@@ -186,11 +186,11 @@ fn mouseField(point: vec2f) -> vec2f {
   let r = length(d) + 0.001;
   let toward = d / r;
   let tangent = vec2f(-toward.y, toward.x);
-  let radius = 0.34 + sim.pressure * 0.12;
+  let radius = 0.42 + sim.pressure * 0.14;
   let falloff = (1.0 - smoothstep(0.02, radius, r)) * sim.pointerStrength;
   let core = 1.0 - smoothstep(0.0, 0.08, r);
   let charge = 1.0 + sim.pressure * PRESSURE_SWIRL_BOOST;
-  return (tangent * falloff * 0.12 + toward * falloff * 0.025 - toward * core * sim.pointerStrength * 0.045) * charge;
+  return (tangent * falloff * 0.16 + toward * falloff * 0.038 - toward * core * sim.pointerStrength * 0.06) * charge;
 }
 
 fn spawn(seed: f32, epoch: f32) -> Particle {

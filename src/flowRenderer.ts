@@ -314,23 +314,43 @@ export async function startFlowFieldRenderer(
   let active = true;
   let checkedFirstFrame = false;
 
+  function updatePointerFromClient(clientX: number, clientY: number): boolean {
+    const rect = canvas.getBoundingClientRect();
+
+    if (
+      clientX < rect.left ||
+      clientX > rect.right ||
+      clientY < rect.top ||
+      clientY > rect.bottom
+    ) {
+      pointer.active = false;
+      return false;
+    }
+
+    pointer.x = ((clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
+    pointer.y = (1 - (clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1;
+    pointer.active = true;
+    return true;
+  }
+
   canvas.addEventListener(
     "pointermove",
     (event) => {
-      const rect = canvas.getBoundingClientRect();
-      pointer.x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
-      pointer.y = (1 - (event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1;
-      pointer.active = true;
+      updatePointerFromClient(event.clientX, event.clientY);
     },
     { signal: abortController.signal },
   );
   canvas.addEventListener(
     "pointerenter",
     (event) => {
-      const rect = canvas.getBoundingClientRect();
-      pointer.x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
-      pointer.y = (1 - (event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1;
-      pointer.active = true;
+      updatePointerFromClient(event.clientX, event.clientY);
+    },
+    { signal: abortController.signal },
+  );
+  window.addEventListener(
+    "pointermove",
+    (event) => {
+      updatePointerFromClient(event.clientX, event.clientY);
     },
     { signal: abortController.signal },
   );
@@ -340,10 +360,7 @@ export async function startFlowFieldRenderer(
       if (event.button !== 0) {
         return;
       }
-      const rect = canvas.getBoundingClientRect();
-      pointer.x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
-      pointer.y = (1 - (event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1;
-      pointer.active = true;
+      updatePointerFromClient(event.clientX, event.clientY);
       pointer.pressed = true;
       try {
         canvas.setPointerCapture(event.pointerId);

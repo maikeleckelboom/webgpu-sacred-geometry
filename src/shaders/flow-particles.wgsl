@@ -108,7 +108,7 @@ fn lineVertex(
   let widthPixels = 0.5 + speed * 6.0 + abs(particle.mCurl) * 80.0 + pointerWake * 1.05 + vectorCharge * 2.05;
   let position = center + normal * corner.y * widthPixels;
   let mask = sceneMask(particle.position);
-  let glintSeed = step(0.978, hash11(particle.seed * 23.71));
+  let glintSeed = step(0.989, hash11(particle.seed * 23.71));
   let glintSlow = 0.3 + 0.7 * smoothstep(0.0, 1.0, sin(render.time * 0.55 + particle.seed * 0.14) * 0.5 + 0.5);
   let glintShimmer = glintSeed * (0.3 + 0.7 * sin(render.time * 3.4 + particle.seed * 2.7 + particle.position.x * 4.1)) * glintSlow;
   let headShimmer = 0.82 + 0.18 * smoothstep(0.0, 1.0, sin(render.time * 0.7 + particle.seed * 0.21) * 0.5 + 0.5);
@@ -118,9 +118,9 @@ fn lineVertex(
   out.local = corner;
   out.color = fieldColor(particle, render.time);
   out.color = out.color * (1.0 + pointerWake * 1.2 + vectorCharge * 2.35);
-  out.color = out.color + vec3f(1.0, 0.94, 0.74) * glintShimmer * 2.3;
-  let baseAlpha = 0.045 + abs(particle.mCurl) * 4.5 + speed * 0.7 + particle.mEnergy * 0.4;
-  out.alpha = render.opacity * mask * lifeFade(particle) * headShimmer * (baseAlpha + glintShimmer * 0.25 + pointerWake * 0.12 + vectorCharge * 0.18);
+  out.color = out.color + vec3f(1.0, 0.94, 0.74) * glintShimmer * 1.15;
+  let baseAlpha = 0.052 + abs(particle.mCurl) * 4.9 + speed * 0.76 + particle.mEnergy * 0.46;
+  out.alpha = render.opacity * mask * lifeFade(particle) * headShimmer * (baseAlpha + glintShimmer * 0.11 + pointerWake * 0.12 + vectorCharge * 0.18);
   return out;
 }
 
@@ -149,9 +149,9 @@ fn spriteVertex(
   );
   let corner = corners[vertexIndex];
   let ndcPixel = vec2f(2.0 / render.viewport.x, 2.0 / render.viewport.y);
-  let marker = smoothstep(0.92, 0.998, hash11(particle.seed * 17.17));
+  let marker = smoothstep(0.965, 0.999, hash11(particle.seed * 17.17));
   let node = step(0.9992, hash11(particle.seed * 29.17));
-  let glint = step(0.966, hash11(particle.seed * 41.83));
+  let glint = step(0.982, hash11(particle.seed * 41.83));
   let toPointer = particle.position - render.pointer;
   let pointerDistance = length(vec2f(toPointer.x * render.aspect, toPointer.y));
   let wakeRadius = 0.43 + render.pressure * 0.4;
@@ -165,7 +165,7 @@ fn spriteVertex(
   let pulse = 0.9 + sin(render.time * 1.8 + particle.seed * 0.031) * 0.1;
   let shimmerPulse = pulse * (0.85 + 0.15 * smoothstep(0.0, 1.0, sin(render.time * 0.65 + particle.seed * 0.11) * 0.5 + 0.5));
   let curlBright = abs(particle.mCurl) * 90.0;
-  let radiusPixels = (0.65 + marker * (2.8 + particle.mSpeed * 3.0 + curlBright) + node * 1.4 + glint * 5.4 + pointerWake * 2.1 + vectorCharge * 3.2) * shimmerPulse;
+  let radiusPixels = (0.56 + marker * (1.65 + particle.mSpeed * 2.0 + curlBright * 0.62) + node * 1.1 + glint * 2.35 + pointerWake * 1.85 + vectorCharge * 2.7) * shimmerPulse;
   let position = particle.position + corner * ndcPixel * radiusPixels;
   let mask = sceneMask(particle.position);
 
@@ -174,8 +174,8 @@ fn spriteVertex(
   out.local = corner;
   out.color = fieldColor(particle, render.time);
   out.color = out.color * (1.0 + pointerWake * 1.2 + vectorCharge * 2.35);
-  out.color = out.color + vec3f(1.0, 0.94, 0.74) * max(glintShimmer * 0.6, nodeTwinkle * 0.34) * 2.3;
-  out.alpha = render.opacity * mask * lifeFade(particle) * (marker * (0.12 + particle.mSpeed * 0.4 + curlBright * 0.4) + nodeTwinkle * 0.12 + glintShimmer * 0.42 + pointerWake * 0.14 + vectorCharge * 0.22);
+  out.color = out.color + vec3f(1.0, 0.94, 0.74) * max(glintShimmer * 0.42, nodeTwinkle * 0.24) * 1.35;
+  out.alpha = render.opacity * mask * lifeFade(particle) * (marker * (0.055 + particle.mSpeed * 0.24 + curlBright * 0.2) + nodeTwinkle * 0.075 + glintShimmer * 0.18 + pointerWake * 0.12 + vectorCharge * 0.18);
   return out;
 }
 
@@ -187,4 +187,3 @@ fn spriteFragment(input: VertexOut) -> @location(0) vec4f {
   let alpha = input.alpha * (disc * 0.72 + core * 0.5);
   return vec4f(input.color * (1.0 + core * 1.6), alpha);
 }
-

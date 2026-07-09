@@ -207,11 +207,11 @@ fn flowMouseField(point: vec2f) -> vec2f {
   let r = length(d) + 0.001;
   let toward = d / r;
   let tangent = vec2f(-toward.y, toward.x);
-  let radius = 0.34 + render.pressure * 0.12;
+  let radius = 0.42 + render.pressure * 0.14;
   let falloff = (1.0 - smoothstep(0.02, radius, r)) * render.pointerStrength;
   let core = 1.0 - smoothstep(0.0, 0.08, r);
   let charge = 1.0 + render.pressure * PRESSURE_SWIRL_BOOST;
-  return (tangent * falloff * 0.12 + toward * falloff * 0.025 - toward * core * render.pointerStrength * 0.045) * charge;
+  return (tangent * falloff * 0.16 + toward * falloff * 0.038 - toward * core * render.pointerStrength * 0.06) * charge;
 }
 
 // The single reusable flow helper: combines the active field mode(s) and
@@ -234,14 +234,14 @@ fn starInteractionMask(fieldCoord: vec2f, flow: vec2f, energyN: f32, starGrid: v
   let localFlowDir = normalize(flow + vec2f(0.001, -0.001));
 
   let flowAlign = smoothstep(0.14, 0.9, abs(dot(outward, localFlowDir)));
-  let broadReach = 1.0 - smoothstep(1.75, 2.6, distanceFromPointer);
-  let cursorGap = smoothstep(0.16, 0.38, distanceFromPointer);
+  let fieldReach = 1.0 - smoothstep(0.48, 1.18, distanceFromPointer);
+  let cursorGap = smoothstep(0.07, 0.24, distanceFromPointer);
   let starVariance = 0.72 + 0.28 * hash21(starGrid + floor(render.pointer * 5.0) + vec2f(17.3, 5.9));
   let activity = render.pointerStrength * (0.36 + render.pressure * 0.64);
-  let fieldResponse = activity * broadReach * (0.18 + energyN * 0.28) * (0.45 + flowAlign * 0.55) * starVariance;
-  let wakeResponse = activity * cursorGap * broadReach * flowAlign * (0.42 + energyN * 0.58) * starVariance;
+  let fieldResponse = activity * fieldReach * (0.15 + energyN * 0.24) * (0.45 + flowAlign * 0.55) * starVariance;
+  let wakeResponse = activity * cursorGap * fieldReach * flowAlign * (0.34 + energyN * 0.5) * starVariance;
 
-  return vec2f(clamp(fieldResponse, 0.0, 0.58), clamp(wakeResponse, 0.0, 1.0));
+  return vec2f(clamp(fieldResponse, 0.0, 0.38), clamp(wakeResponse, 0.0, 0.64));
 }
 
 // Star field sampled through a flow-warped coordinate system.
@@ -277,19 +277,30 @@ fn skyColor(uv: vec2f, time: f32) -> vec3f {
   let pointerDir = toPointer / pointerDist;
   let lensRadius = 0.24 + render.pressure * 0.1;
   let pointerProx = 1.0 - smoothstep(0.02, lensRadius, pointerDist);
-  let pointerWarp = pointerDir * pointerProx * render.pointerStrength * 0.0015;
+  let pointerWarp = pointerDir * pointerProx * render.pointerStrength * 0.0065;
 
   // Flow warp: displace the star sampling domain by the local flow vector
   // (converted from field space to UV space). Subtle enough that stars
   // keep their stable identity but drift and breathe with the field.
-  let flowWarp = flow * 0.5 * 0.024;
-  let interactionWarp = flow * render.pointerStrength * (0.005 + render.pressure * 0.005);
-  let warpedUv = uv + flowWarp + interactionWarp + pointerWarp;
+  let starParallax = -render.pointer * render.pointerStrength;
+  let farWarp = flow * 0.5 * 0.009 + starParallax * 0.0025 + vec2f(time * 0.00045, -time * 0.00032);
+  let farDomain = (uv + farWarp) * vec2f(150.0, 88.0);
+  let farGrid = floor(farDomain);
+  let farLocal = fract(farDomain) - vec2f(0.5);
+  let farRand = hash21(farGrid + vec2f(19.2, 4.4));
+  let farStar = step(0.99865, farRand);
+  let farTwinkle = 0.62 + 0.18 * sin(time * (0.22 + hash21(farGrid) * 0.6) + farRand * 6.2831);
+  let farShape = exp(-dot(farLocal, farLocal) * 138.0);
+  let farFade = smoothstep(0.22, 0.98, uv.y);
+  let hoverDim = 1.0 - pointerProx * render.pointerStrength * 0.46;
+  color += mix(vec3f(0.32, 0.58, 0.68), vec3f(0.72, 0.86, 0.76), farRand) * farStar * farShape * farTwinkle * 0.052 * farFade * hoverDim;
 
-  // Two density layers for variety (preserved). Each star gets its own
-  // random frequency, two twinkle octaves, a rare flare, a random hue,
-  // and its own brightness so the sky never beats in a pattern.
-  let starDomain = warpedUv * vec2f(280.0, 160.0);
+  let flowWarp = flow * 0.5 * 0.018;
+  let interactionWarp = flow * render.pointerStrength * (0.009 + render.pressure * 0.006);
+  let warpedUv = uv + flowWarp + interactionWarp + pointerWarp + starParallax * 0.0065;
+
+  // Near stars stay sparse and use stronger parallax/flow warp than the far layer.
+  let starDomain = warpedUv * vec2f(138.0, 82.0);
   let starGrid = floor(starDomain);
   let starLocal = fract(starDomain) - vec2f(0.5);
   let cellRand = hash21(starGrid);
@@ -297,8 +308,8 @@ fn skyColor(uv: vec2f, time: f32) -> vec3f {
   let freqSlow = 0.35 + hash21(starGrid + vec2f(3.7, 9.2)) * 1.45;
   let freqFast = 1.6 + hash21(starGrid + vec2f(5.1, 4.4)) * 3.4;
   let brightness = 0.45 + hash21(starGrid + vec2f(11.1, 13.3)) * 0.55;
-  let star = step(0.99762, cellRand);
-  let brightStar = step(0.99937, cellRand);
+  let star = step(0.99882, cellRand);
+  let brightStar = step(0.99978, cellRand);
   let starMask = max(star, brightStar);
   let starInteraction = starInteractionMask(fieldCoord, flow, energyN, starGrid, starMask);
   let fieldResponse = starInteraction.x;
@@ -322,7 +333,7 @@ fn skyColor(uv: vec2f, time: f32) -> vec3f {
   // local flow direction (expressed in cell space so the orientation
   // matches the screen). Normal stars get a softer version of the same
   // response instead of staying decorative point sprites.
-  let flowCellDir = normalize(vec2f(flow.x * 280.0, flow.y * 160.0) + vec2f(0.001, 0.001));
+  let flowCellDir = normalize(vec2f(flow.x * 138.0, flow.y * 82.0) + vec2f(0.001, 0.001));
   let perpCellDir = vec2f(-flowCellDir.y, flowCellDir.x);
   let along = dot(starLocal, flowCellDir);
   let across = dot(starLocal, perpCellDir);
@@ -333,19 +344,19 @@ fn skyColor(uv: vec2f, time: f32) -> vec3f {
   let starShape = mix(pointStarShape, flowStarShape, clamp(0.18 + energyN * 0.28 + fieldResponse * 1.55, 0.0, 0.88));
   let streakLen = 1.0 + energyN * 1.8 + fieldResponse * 1.2 + flowWake * 2.1;
   let streakSq = streakLen * streakLen;
-  let brightStarShape = exp(-(along * along * (48.0 / streakSq) + across * across * 48.0));
+  let brightStarShape = exp(-(along * along * (72.0 / streakSq) + across * across * 72.0));
 
   // Energy + pointer brightness modulation. Stars brighten only when they
   // land in sparse flow-connected wake ribbons, not in a radial cursor blob.
-  let energyBright = 1.0 + energyN * 0.45 + fieldResponse * 0.8;
-  let pointerBright = 1.0 + fieldResponse * 1.45 + flowWake * 2.6;
+  let energyBright = 0.85 + energyN * 0.28 + fieldResponse * 0.45;
+  let pointerBright = 1.0 + fieldResponse * 0.9 + flowWake * 1.3;
   let vertFade = smoothstep(0.25, 0.98, uv.y);
   let vertFadeBright = smoothstep(0.2, 0.98, uv.y);
 
-  color += starColor * star * starShape * clamp(twinkle * pointerTwinkle, 0.0, 1.6) * brightness * 0.34 * energyBright * pointerBright * vertFade;
-  color += brightStarColor * brightStar * brightStarShape * clamp(twinkle * 1.2 * pointerTwinkle, 0.0, 1.8) * 0.56 * energyBright * pointerBright * vertFadeBright;
-  color += starColor * star * flowStarShape * fieldResponse * 0.12 * vertFade;
-  color += brightStarColor * starMask * exp(-dot(starLocal, starLocal) * 18.0) * flowWake * 0.36 * vertFadeBright;
+  color += starColor * star * starShape * clamp(twinkle * pointerTwinkle, 0.0, 1.45) * brightness * 0.078 * energyBright * pointerBright * vertFade * hoverDim;
+  color += brightStarColor * brightStar * brightStarShape * clamp(twinkle * 1.2 * pointerTwinkle, 0.0, 1.6) * 0.135 * energyBright * pointerBright * vertFadeBright * hoverDim;
+  color += starColor * star * flowStarShape * fieldResponse * 0.04 * vertFade;
+  color += brightStarColor * starMask * exp(-dot(starLocal, starLocal) * 22.0) * flowWake * 0.08 * vertFadeBright;
 
   return color;
 }
@@ -438,12 +449,12 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
   let dyeMag = length(dye);
   let causticMask = smoothstep(0.18, 0.7, dyeMag);
   let causticCore = smoothstep(0.25, 0.7, dyeMag);
-  let causticColor = vec3f(0.45, 0.95, 0.78) * r1 * 0.42 + vec3f(0.32, 0.78, 1.0) * r2 * 0.3;
+  let causticColor = vec3f(0.45, 0.95, 0.78) * r1 * 0.54 + vec3f(0.32, 0.78, 1.0) * r2 * 0.38;
   let caustic = causticColor * causticMask * causticCore;
 
   let particleHalo = localAccumulationHalo(input.uv);
   let particleCore = smoothstep(0.12, 0.72, dyeMag);
-  let particleLight = (particleHalo * 0.78 + particleCore * 0.22) * render.pointerStrength * (1.0 + pressure * PRESSURE_LIGHT_BOOST);
+  let particleLight = (particleHalo * 0.88 + particleCore * 0.28) * render.pointerStrength * (1.0 + pressure * PRESSURE_LIGHT_BOOST);
   let causticLit = caustic * (1.0 + particleLight * 1.4);
   let bloomLit = bloom * (1.0 + particleLight * 1.1);
 
@@ -455,7 +466,7 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
   let pressureGlow = pressureHalo * vec3f(0.42, 0.78, 1.0) * render.pointerStrength;
 
   let bloomPulse = 0.86 + 0.14 * smoothstep(0.0, 1.0, sin(render.time * 0.6) * 0.5 + 0.5);
-  var color = skyColor(input.uv, render.time) + base + bloomLit * vec3f(0.72, 1.02, 0.86) * bloomPulse + causticLit + chargeGlow + pressureGlow;
+  var color = skyColor(input.uv, render.time) + base * 1.08 + bloomLit * vec3f(0.68, 0.96, 0.82) * bloomPulse + causticLit * 1.18 + chargeGlow + pressureGlow;
 
   let noise = (hash21(input.uv * render.viewport + vec2f(render.time * 17.0, 0.0)) - 0.5) / 255.0;
   color += noise;
