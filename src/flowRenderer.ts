@@ -1,7 +1,7 @@
 const PARTICLE_COUNT = 72000;
 const WORKGROUP_SIZE = 64;
 const FLOATS_PER_PARTICLE = 12;
-const UNIFORM_FLOATS = 14;
+const UNIFORM_FLOATS = 16;
 const TRAIL_DECAY = 0.965;
 
 const BLOOM_LEVELS = 5;
@@ -13,6 +13,15 @@ const BLOOM_UPSAMPLE_WEIGHT = 0.62;
 const BLOOM_EXPOSURE = 0.9;
 const BLOOM_SHADING = 0.5;
 const BLOOM_GAMMA = 1.0 / 2.4;
+
+const PRESSURE_CHARGE_RATE = 0.85;
+const PRESSURE_RELEASE_RATE = 3.0;
+const PRESSURE_SWIRL_BOOST = 1.6;
+const PRESSURE_BLOOM_BOOST = 2.8;
+const PRESSURE_LIGHT_BOOST = 2.4;
+const PRESSURE_EXPOSURE_BOOST = 0.28;
+
+const VELOCITY_GAIN = 1.35;
 
 function bloomCurve(threshold: number, softKnee: number): {
   curve: [number, number, number, number];
@@ -60,7 +69,7 @@ struct Sim {
   modeTopo: f32,
   modeArch: f32,
   modeWaves: f32,
-  padding: f32,
+  pressure: f32,
 }
 
 @group(0) @binding(0) var<storage, read> sourceParticles: array<Particle>;
@@ -232,9 +241,11 @@ fn mouseField(point: vec2f) -> vec2f {
   let r = length(d) + 0.001;
   let toward = d / r;
   let tangent = vec2f(-toward.y, toward.x);
-  let falloff = (1.0 - smoothstep(0.02, 0.45, r)) * sim.pointerStrength;
+  let radius = 0.45 + sim.pressure * 0.35;
+  let falloff = (1.0 - smoothstep(0.02, radius, r)) * sim.pointerStrength;
   let core = 1.0 - smoothstep(0.0, 0.08, r);
-  return tangent * falloff * 0.18 + toward * falloff * 0.04 - toward * core * sim.pointerStrength * 0.1;
+  let charge = 1.0 + sim.pressure * ${PRESSURE_SWIRL_BOOST.toFixed(2)};
+  return (tangent * falloff * 0.18 + toward * falloff * 0.04 - toward * core * sim.pointerStrength * 0.1) * charge;
 }
 
 fn spawn(seed: f32, epoch: f32) -> Particle {
@@ -282,7 +293,7 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u) {
 
   let deltaTime = min(sim.deltaTime, 0.033);
   let position = particle.position;
-  let fieldVelocity = fieldAt(position, sim.time) + mouseField(position);
+  let fieldVelocity = (fieldAt(position, sim.time) + mouseField(position)) * ${VELOCITY_GAIN.toFixed(2)};
   let response = 0.05 + particle.depth * 0.055;
   particle.velocity = mix(particle.velocity, fieldVelocity, response);
   particle.position = particle.position + particle.velocity * deltaTime * sim.motion * (0.5 + particle.depth * 0.5);
@@ -326,6 +337,7 @@ struct Render {
   pointerStrength: f32,
   fieldGain: f32,
   padding: vec2f,
+  pressure: f32,
 }
 
 struct VertexOut {
@@ -400,7 +412,8 @@ fn lineVertex(
   let normal = vec2f(screenNormal.x * ndcPixel.x, screenNormal.y * ndcPixel.y);
   let toPointer = particle.position - render.pointer;
   let pointerDistance = length(vec2f(toPointer.x * render.aspect, toPointer.y));
-  let pointerWake = (1.0 - smoothstep(0.035, 0.5, pointerDistance)) * render.pointerStrength;
+  let wakeRadius = 0.5 + render.pressure * 0.4;
+  let pointerWake = (1.0 - smoothstep(0.035, wakeRadius, pointerDistance)) * render.pointerStrength * (1.0 + render.pressure * 1.8);
   let trail = 0.022 + speed * 0.20 + particle.depth * 0.025 + pointerWake * 0.08;
   let head = particle.position;
   let tail = head - direction * trail;
@@ -454,7 +467,8 @@ fn spriteVertex(
   let glint = step(0.966, hash11(particle.seed * 41.83));
   let toPointer = particle.position - render.pointer;
   let pointerDistance = length(vec2f(toPointer.x * render.aspect, toPointer.y));
-  let pointerWake = (1.0 - smoothstep(0.02, 0.43, pointerDistance)) * render.pointerStrength;
+  let wakeRadius = 0.43 + render.pressure * 0.4;
+  let pointerWake = (1.0 - smoothstep(0.02, wakeRadius, pointerDistance)) * render.pointerStrength * (1.0 + render.pressure * 1.8);
   let glintSlow = 0.25 + 0.75 * smoothstep(0.0, 1.0, sin(render.time * 0.5 + particle.seed * 0.16) * 0.5 + 0.5);
   let glintShimmer = glint * (0.4 + 0.6 * sin(render.time * 4.6 + particle.seed * 3.1 + particle.position.x * 2.4)) * glintSlow;
   let nodeSlow = 0.3 + 0.7 * smoothstep(0.0, 1.0, sin(render.time * 0.42 + particle.seed * 0.19) * 0.5 + 0.5);
@@ -605,6 +619,7 @@ struct Render {
   bloomIntensity: f32,
   exposure: f32,
   shadingStrength: f32,
+  pressure: f32,
 }
 
 struct VertexOut {
@@ -744,7 +759,9 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
   let dye = textureSample(historyTexture, postSampler, input.uv).rgb;
   let base = fakeShading(input.uv, dye);
 
-  var bloom = textureSample(bloomTexture, postSampler, input.uv).rgb * render.bloomIntensity;
+  let pressure = clamp(render.pressure, 0.0, 1.0);
+  let bloomBoost = 1.0 + pressure * ${PRESSURE_BLOOM_BOOST.toFixed(2)};
+  var bloom = textureSample(bloomTexture, postSampler, input.uv).rgb * render.bloomIntensity * bloomBoost;
   bloom = linearToGamma(bloom);
 
   let r1 = ridge(input.uv, render.time);
@@ -758,20 +775,33 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
   let pointerNdc = input.uv * 2.0 - vec2f(1.0, 1.0);
   let pointerOffset = pointerNdc - render.pointer;
   let pointerDistance = length(vec2f(pointerOffset.x * render.aspect, pointerOffset.y));
-  let pointerHalo = exp(-pointerDistance * pointerDistance * 7.5);
-  let pointerCore = exp(-pointerDistance * pointerDistance * 55.0);
-  let pointerLight = (pointerHalo * 0.78 + pointerCore * 0.22) * render.pointerStrength;
+  let haloFalloff = 7.5 - pressure * 3.2;
+  let coreFalloff = 55.0 - pressure * 22.0;
+  let pointerHalo = exp(-pointerDistance * pointerDistance * haloFalloff);
+  let pointerCore = exp(-pointerDistance * pointerDistance * coreFalloff);
+  let pointerLight = (pointerHalo * 0.78 + pointerCore * 0.22) * render.pointerStrength * (1.0 + pressure * ${PRESSURE_LIGHT_BOOST.toFixed(2)});
   let causticLit = caustic * (1.0 + pointerLight * 1.4);
   let bloomLit = bloom * (1.0 + pointerLight * 1.1);
 
+  let ringRadius = 0.06 + pressure * 0.34;
+  let ringWidth = 0.012 + pressure * 0.04;
+  let ringDelta = pointerDistance - ringRadius;
+  let ringFalloff = exp(-(ringDelta * ringDelta) / (ringWidth * ringWidth));
+  let ringShimmer = 0.7 + 0.3 * sin(render.time * 6.0 + pressure * 12.0);
+  let ringColor = mix(vec3f(0.55, 0.95, 1.0), vec3f(1.0, 0.86, 0.62), pressure);
+  let chargeRing = ringFalloff * ringShimmer * pressure * render.pointerStrength * ringColor * 1.8;
+
+  let pressureHalo = exp(-pointerDistance * pointerDistance * (3.0 - pressure * 1.6)) * pressure * 0.5;
+  let pressureGlow = pressureHalo * vec3f(0.42, 0.78, 1.0) * render.pointerStrength;
+
   let bloomPulse = 0.86 + 0.14 * smoothstep(0.0, 1.0, sin(render.time * 0.6) * 0.5 + 0.5);
-  var color = skyColor(input.uv, render.time) + base + bloomLit * vec3f(0.72, 1.02, 0.86) * bloomPulse + causticLit;
+  var color = skyColor(input.uv, render.time) + base + bloomLit * vec3f(0.72, 1.02, 0.86) * bloomPulse + causticLit + chargeRing + pressureGlow;
 
   let noise = (hash21(input.uv * render.viewport + vec2f(render.time * 17.0, 0.0)) - 0.5) / 255.0;
   color += noise;
 
-  let contrasted = pow(max(color, vec3f(0.0)), vec3f(1.14));
-  let exposed = contrasted * render.exposure;
+  let contrasted = pow(max(color, vec3f(0.0)), vec3f(1.14 - pressure * 0.06));
+  let exposed = contrasted * (render.exposure + pressure * ${PRESSURE_EXPOSURE_BOOST.toFixed(2)});
   let toned = acesFilmic(exposed);
   return vec4f(linearToGamma(toned), 1.0);
 }
@@ -782,6 +812,8 @@ interface PointerState {
   y: number;
   strength: number;
   active: boolean;
+  pressed: boolean;
+  pressure: number;
 }
 
 export interface FlowFieldRenderer {
@@ -1020,6 +1052,8 @@ export async function startFlowFieldRenderer(
     y: 0,
     strength: 0,
     active: false,
+    pressed: false,
+    pressure: 0,
   };
   const simUniforms = new Float32Array(UNIFORM_FLOATS);
   const renderUniforms = new Float32Array(UNIFORM_FLOATS);
@@ -1067,9 +1101,33 @@ export async function startFlowFieldRenderer(
     { signal: abortController.signal },
   );
   canvas.addEventListener(
+    "pointerdown",
+    (event) => {
+      if (event.button !== 0) {
+        return;
+      }
+      const rect = canvas.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
+      pointer.y = (1 - (event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1;
+      pointer.active = true;
+      pointer.pressed = true;
+      try {
+        canvas.setPointerCapture(event.pointerId);
+      } catch {
+        // Pointer capture is optional; the press still ramps via local listeners.
+      }
+    },
+    { signal: abortController.signal },
+  );
+  const releasePointer = (): void => {
+    pointer.pressed = false;
+  };
+  canvas.addEventListener("pointerup", releasePointer, { signal: abortController.signal });
+  canvas.addEventListener(
     "pointerleave",
     () => {
       pointer.active = false;
+      pointer.pressed = false;
     },
     { signal: abortController.signal },
   );
@@ -1077,6 +1135,7 @@ export async function startFlowFieldRenderer(
     "pointercancel",
     () => {
       pointer.active = false;
+      pointer.pressed = false;
     },
     { signal: abortController.signal },
   );
@@ -1084,6 +1143,7 @@ export async function startFlowFieldRenderer(
     "blur",
     () => {
       pointer.active = false;
+      pointer.pressed = false;
     },
     { signal: abortController.signal },
   );
@@ -1255,9 +1315,16 @@ export async function startFlowFieldRenderer(
     const aspect = canvas.width / Math.max(1, canvas.height);
     const motion = reducedMotion ? 0.28 : 1;
     if (pointer.active) {
-      pointer.strength = Math.min(1, pointer.strength + 0.4);
+      pointer.strength = Math.min(1, pointer.strength + (pointer.pressed ? 0.5 : 0.4));
     } else {
       pointer.strength *= reducedMotion ? 0.86 : 0.94;
+    }
+    const chargeRate = (reducedMotion ? PRESSURE_CHARGE_RATE * 0.5 : PRESSURE_CHARGE_RATE);
+    const releaseRate = (reducedMotion ? PRESSURE_RELEASE_RATE * 0.6 : PRESSURE_RELEASE_RATE);
+    if (pointer.pressed && pointer.active) {
+      pointer.pressure = Math.min(1, pointer.pressure + deltaTime * chargeRate);
+    } else {
+      pointer.pressure = Math.max(0, pointer.pressure - deltaTime * releaseRate);
     }
     lastTime = seconds;
 
@@ -1279,6 +1346,8 @@ export async function startFlowFieldRenderer(
       currentWeights[3],
       currentWeights[4],
       0,
+      pointer.pressure,
+      0,
       0,
       0,
     ]);
@@ -1295,6 +1364,8 @@ export async function startFlowFieldRenderer(
       BLOOM_INTENSITY,
       BLOOM_EXPOSURE,
       BLOOM_SHADING,
+      pointer.pressure,
+      0,
       0,
       0,
     ]);
