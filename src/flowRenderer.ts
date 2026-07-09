@@ -8,9 +8,9 @@ const BLOOM_LEVELS = 5;
 const BLOOM_BASE_MAX = 640;
 const BLOOM_THRESHOLD = 0.6;
 const BLOOM_SOFT_KNEE = 0.7;
-const BLOOM_INTENSITY = 0.8;
+const BLOOM_INTENSITY = 0.9;
 const BLOOM_UPSAMPLE_WEIGHT = 0.62;
-const BLOOM_EXPOSURE = 1.1;
+const BLOOM_EXPOSURE = 0.9;
 const BLOOM_SHADING = 0.5;
 const BLOOM_GAMMA = 1.0 / 2.4;
 
@@ -365,9 +365,16 @@ fn fieldColor(particle: Particle, time: f32) -> vec3f {
   var color = mix(cyan, violet, hue);
   color = mix(color, green, smoothstep(0.6, 1.0, abs(particle.mDiv)) * 0.35);
   color = mix(color, amber, smoothstep(0.92, 1.0, hash11(particle.seed * 9.71)) * 0.45);
-  let speedLift = clamp(particle.mSpeed * 4.0, 0.0, 1.0);
-  color = color * (0.65 + speedLift * 0.55);
-  return color;
+
+  let speedN = clamp(particle.mSpeed * 4.0, 0.0, 1.0);
+  let curlN = clamp(abs(particle.mCurl) * 6.0, 0.0, 1.0);
+  let energyN = clamp(particle.mEnergy * 1.5, 0.0, 1.0);
+  let metric = max(max(speedN, curlN * 0.85), energyN * 0.6);
+
+  let surge = 0.55 + 0.24 * sin(time * 0.12) + 0.13 * sin(time * 0.29 + 1.3) + 0.38 * pow(max(0.0, sin(time * 0.15)), 24.0);
+  let intensity = (0.06 + pow(metric, 2.4) * 6.5) * clamp(surge, 0.32, 1.4);
+
+  return color * intensity;
 }
 
 @vertex
@@ -410,7 +417,8 @@ fn lineVertex(
   out.position = vec4f(position, 0.0, 1.0);
   out.local = corner;
   out.color = fieldColor(particle, render.time);
-  out.color = mix(out.color, vec3f(1.0, 0.94, 0.74), glintShimmer * 0.55);
+  out.color = out.color * (1.0 + pointerWake * 2.2);
+  out.color = out.color + vec3f(1.0, 0.94, 0.74) * glintShimmer * 1.9;
   let baseAlpha = 0.045 + abs(particle.mCurl) * 4.5 + speed * 0.7 + particle.mEnergy * 0.4;
   out.alpha = render.opacity * mask * lifeFade(particle) * headShimmer * (baseAlpha + glintShimmer * 0.25 + pointerWake * 0.18);
   return out;
@@ -422,7 +430,7 @@ fn lineFragment(input: VertexOut) -> @location(0) vec4f {
   let headFade = smoothstep(0.0, 0.16, input.local.x);
   let tailFade = 1.0 - smoothstep(0.82, 1.0, input.local.x) * 0.24;
   let alpha = input.alpha * side * headFade * tailFade;
-  return vec4f(input.color * 2.4, alpha);
+  return vec4f(input.color, alpha);
 }
 
 @vertex
@@ -462,7 +470,8 @@ fn spriteVertex(
   out.position = vec4f(position, 0.0, 1.0);
   out.local = corner;
   out.color = fieldColor(particle, render.time);
-  out.color = mix(out.color, vec3f(1.0, 0.94, 0.74), max(glintShimmer * 0.6, nodeTwinkle * 0.34));
+  out.color = out.color * (1.0 + pointerWake * 2.2);
+  out.color = out.color + vec3f(1.0, 0.94, 0.74) * max(glintShimmer * 0.6, nodeTwinkle * 0.34) * 1.9;
   out.alpha = render.opacity * mask * lifeFade(particle) * (marker * (0.12 + particle.mSpeed * 0.4 + curlBright * 0.4) + nodeTwinkle * 0.12 + glintShimmer * 0.42 + pointerWake * 0.24);
   return out;
 }
@@ -473,7 +482,7 @@ fn spriteFragment(input: VertexOut) -> @location(0) vec4f {
   let disc = smoothstep(1.0, 0.16, distance);
   let core = smoothstep(0.48, 0.0, distance);
   let alpha = input.alpha * (disc * 0.72 + core * 0.5);
-  return vec4f(input.color * (1.7 + core * 2.4), alpha);
+  return vec4f(input.color * (1.0 + core * 1.6), alpha);
 }
 `;
 
@@ -665,14 +674,14 @@ fn ridge2(uv: vec2f, time: f32) -> f32 {
 
 fn skyColor(uv: vec2f, time: f32) -> vec3f {
   let vertical = smoothstep(0.0, 1.0, uv.y);
-  var color = mix(vec3f(0.005, 0.007, 0.012), vec3f(0.014, 0.05, 0.04), vertical);
-  color += vec3f(0.028, 0.006, 0.038) * smoothstep(0.24, 0.92, uv.x) * smoothstep(0.06, 0.8, uv.y);
+  var color = mix(vec3f(0.0006, 0.0009, 0.002), vec3f(0.0025, 0.008, 0.0065), vertical);
+  color += vec3f(0.009, 0.002, 0.014) * smoothstep(0.34, 0.97, uv.x) * smoothstep(0.14, 0.85, uv.y);
 
   let starGrid = floor(uv * vec2f(260.0, 150.0));
-  let star = step(0.9955, hash21(starGrid));
+  let star = step(0.9964, hash21(starGrid));
   let twinkle = 0.5 + 0.5 * smoothstep(0.0, 1.0, sin(time * 0.8 + hash21(starGrid + vec2f(11.0, 11.0)) * 6.2831) * 0.5 + 0.5);
   let microTwinkle = 0.7 + 0.3 * sin(time * 2.4 + hash21(starGrid + vec2f(3.0, 7.0)) * 12.0);
-  color += vec3f(0.5, 0.86, 0.74) * star * twinkle * microTwinkle * 0.26 * smoothstep(0.2, 0.96, uv.y);
+  color += vec3f(0.5, 0.86, 0.74) * star * twinkle * microTwinkle * 0.14 * smoothstep(0.3, 0.97, uv.y);
 
   return color;
 }
@@ -716,9 +725,9 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
   let r1 = ridge(input.uv, render.time);
   let r2 = ridge2(input.uv * vec2f(1.0, 1.1) + vec2f(13.7, 7.1), render.time);
   let dyeMag = length(dye);
-  let causticMask = smoothstep(0.0, 0.4, dyeMag);
-  let causticCore = smoothstep(0.04, 0.32, dyeMag);
-  let causticColor = vec3f(0.45, 0.95, 0.78) * r1 * 0.55 + vec3f(0.32, 0.78, 1.0) * r2 * 0.42;
+  let causticMask = smoothstep(0.18, 0.7, dyeMag);
+  let causticCore = smoothstep(0.25, 0.7, dyeMag);
+  let causticColor = vec3f(0.45, 0.95, 0.78) * r1 * 0.42 + vec3f(0.32, 0.78, 1.0) * r2 * 0.3;
   let caustic = causticColor * causticMask * causticCore;
 
   let pointerNdc = input.uv * 2.0 - vec2f(1.0, 1.0);
@@ -737,7 +746,8 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
   let noise = (hash21(input.uv * render.viewport + vec2f(render.time * 17.0, 0.0)) - 0.5) / 255.0;
   color += noise;
 
-  let exposed = color * render.exposure;
+  let contrasted = pow(max(color, vec3f(0.0)), vec3f(1.14));
+  let exposed = contrasted * render.exposure;
   let toned = acesFilmic(exposed);
   return vec4f(linearToGamma(toned), 1.0);
 }
