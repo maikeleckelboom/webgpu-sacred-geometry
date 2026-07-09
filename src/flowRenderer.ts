@@ -8,7 +8,7 @@ const BLOOM_LEVELS = 5;
 const BLOOM_BASE_MAX = 640;
 const BLOOM_THRESHOLD = 0.6;
 const BLOOM_SOFT_KNEE = 0.7;
-const BLOOM_INTENSITY = 0.9;
+const BLOOM_INTENSITY = 1.0;
 const BLOOM_UPSAMPLE_WEIGHT = 0.62;
 const BLOOM_EXPOSURE = 0.9;
 const BLOOM_SHADING = 0.5;
@@ -418,7 +418,7 @@ fn lineVertex(
   out.local = corner;
   out.color = fieldColor(particle, render.time);
   out.color = out.color * (1.0 + pointerWake * 2.2);
-  out.color = out.color + vec3f(1.0, 0.94, 0.74) * glintShimmer * 1.9;
+  out.color = out.color + vec3f(1.0, 0.94, 0.74) * glintShimmer * 2.3;
   let baseAlpha = 0.045 + abs(particle.mCurl) * 4.5 + speed * 0.7 + particle.mEnergy * 0.4;
   out.alpha = render.opacity * mask * lifeFade(particle) * headShimmer * (baseAlpha + glintShimmer * 0.25 + pointerWake * 0.18);
   return out;
@@ -471,7 +471,7 @@ fn spriteVertex(
   out.local = corner;
   out.color = fieldColor(particle, render.time);
   out.color = out.color * (1.0 + pointerWake * 2.2);
-  out.color = out.color + vec3f(1.0, 0.94, 0.74) * max(glintShimmer * 0.6, nodeTwinkle * 0.34) * 1.9;
+  out.color = out.color + vec3f(1.0, 0.94, 0.74) * max(glintShimmer * 0.6, nodeTwinkle * 0.34) * 2.3;
   out.alpha = render.opacity * mask * lifeFade(particle) * (marker * (0.12 + particle.mSpeed * 0.4 + curlBright * 0.4) + nodeTwinkle * 0.12 + glintShimmer * 0.42 + pointerWake * 0.24);
   return out;
 }
@@ -675,13 +675,38 @@ fn ridge2(uv: vec2f, time: f32) -> f32 {
 fn skyColor(uv: vec2f, time: f32) -> vec3f {
   let vertical = smoothstep(0.0, 1.0, uv.y);
   var color = mix(vec3f(0.0006, 0.0009, 0.002), vec3f(0.0025, 0.008, 0.0065), vertical);
-  color += vec3f(0.009, 0.002, 0.014) * smoothstep(0.34, 0.97, uv.x) * smoothstep(0.14, 0.85, uv.y);
 
-  let starGrid = floor(uv * vec2f(260.0, 150.0));
-  let star = step(0.9964, hash21(starGrid));
-  let twinkle = 0.5 + 0.5 * smoothstep(0.0, 1.0, sin(time * 0.8 + hash21(starGrid + vec2f(11.0, 11.0)) * 6.2831) * 0.5 + 0.5);
-  let microTwinkle = 0.7 + 0.3 * sin(time * 2.4 + hash21(starGrid + vec2f(3.0, 7.0)) * 12.0);
-  color += vec3f(0.5, 0.86, 0.74) * star * twinkle * microTwinkle * 0.14 * smoothstep(0.3, 0.97, uv.y);
+  // Subtle nebula color wash: low-frequency, incommensurate drift, varies by region.
+  let n1 = snoise2(uv * vec2f(2.1, 1.4) + vec2f(time * 0.013, -time * 0.009));
+  let n2 = snoise2(uv * vec2f(3.4, 2.3) + vec2f(-time * 0.017, time * 0.011 + 4.7));
+  let nebula = n1 * 0.6 + n2 * 0.4;
+  color += vec3f(0.022, 0.008, 0.04) * max(nebula, 0.0) * smoothstep(0.15, 0.92, uv.y);
+  color += vec3f(0.005, 0.028, 0.022) * max(-nebula, 0.0) * smoothstep(0.1, 0.95, uv.y);
+
+  // Star layers: two densities for variety. Each star gets its own random
+  // frequency, two twinkle octaves, a rare flare, a random hue, and its
+  // own brightness so the sky never beats in a pattern.
+  let starGrid = floor(uv * vec2f(280.0, 160.0));
+  let cellRand = hash21(starGrid);
+  let phase = hash21(starGrid + vec2f(7.3, 2.1)) * 6.2831;
+  let freqSlow = 0.35 + hash21(starGrid + vec2f(3.7, 9.2)) * 1.45;
+  let freqFast = 1.6 + hash21(starGrid + vec2f(5.1, 4.4)) * 3.4;
+  let brightness = 0.45 + hash21(starGrid + vec2f(11.1, 13.3)) * 0.55;
+  let star = step(0.9966, cellRand);
+  let brightStar = step(0.9991, cellRand);
+
+  let slow = sin(time * freqSlow + phase);
+  let fast = sin(time * freqFast + phase * 1.7 + 2.1);
+  var twinkle = 0.42 + 0.4 * slow + 0.16 * fast;
+  let flarePhase = sin(time * (freqSlow * 0.43) + phase * 0.27);
+  twinkle = twinkle + pow(max(0.0, flarePhase), 26.0) * 0.55;
+
+  let hueShift = hash21(starGrid + vec2f(1.2, 8.8));
+  let starColor = mix(vec3f(0.58, 0.88, 0.78), vec3f(1.0, 0.95, 0.82), hueShift);
+  let brightStarColor = mix(vec3f(0.7, 0.95, 1.0), vec3f(1.0, 0.92, 0.7), hash21(starGrid + vec2f(9.9, 0.3)));
+
+  color += starColor * star * clamp(twinkle, 0.0, 1.4) * brightness * 0.18 * smoothstep(0.25, 0.98, uv.y);
+  color += brightStarColor * brightStar * clamp(twinkle * 1.2, 0.0, 1.6) * 0.42 * smoothstep(0.2, 0.98, uv.y);
 
   return color;
 }

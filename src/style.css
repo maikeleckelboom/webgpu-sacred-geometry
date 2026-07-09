@@ -366,9 +366,7 @@ body.aurora-page-body .lab-header {
   --study-status-border: rgba(120, 255, 196, 0.32);
   --study-scrim:
     linear-gradient(180deg, rgba(2, 3, 5, 0.44) 0%, transparent 30%, rgba(2, 3, 5, 0.28) 100%);
-  --study-vignette:
-    linear-gradient(90deg, rgba(137, 255, 193, 0.06) 0%, transparent 18%, transparent 100%),
-    linear-gradient(0deg, rgba(2, 3, 5, 0.72) 0%, rgba(2, 3, 5, 0.18) 17%, transparent 46%);
+  --study-vignette: none;
 }
 
 .study-page--flow .study-canvas-layer {
@@ -597,13 +595,7 @@ body.aurora-page-body .lab-header {
   }
 
   .study-page--flow::before {
-    background:
-      linear-gradient(
-        180deg,
-        rgba(2, 3, 5, 0.98) 0%,
-        rgba(2, 3, 5, 0.78) 48%,
-        rgba(2, 3, 5, 0.18) 100%
-      );
+    background: none;
   }
 
   .study-page--aurora::before {
