@@ -692,8 +692,8 @@ fn skyColor(uv: vec2f, time: f32) -> vec3f {
   let freqSlow = 0.35 + hash21(starGrid + vec2f(3.7, 9.2)) * 1.45;
   let freqFast = 1.6 + hash21(starGrid + vec2f(5.1, 4.4)) * 3.4;
   let brightness = 0.45 + hash21(starGrid + vec2f(11.1, 13.3)) * 0.55;
-  let star = step(0.9966, cellRand);
-  let brightStar = step(0.9991, cellRand);
+  let star = step(0.99762, cellRand);
+  let brightStar = step(0.99937, cellRand);
 
   let slow = sin(time * freqSlow + phase);
   let fast = sin(time * freqFast + phase * 1.7 + 2.1);
@@ -765,8 +765,7 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
   let bloomLit = bloom * (1.0 + pointerLight * 1.1);
 
   let bloomPulse = 0.86 + 0.14 * smoothstep(0.0, 1.0, sin(render.time * 0.6) * 0.5 + 0.5);
-  let pointerColor = (vec3f(0.34, 0.86, 0.62) * pointerHalo + vec3f(0.7, 0.96, 0.82) * pointerCore) * render.pointerStrength * 0.28;
-  var color = skyColor(input.uv, render.time) + base + bloomLit * vec3f(0.72, 1.02, 0.86) * bloomPulse + causticLit + pointerColor;
+  var color = skyColor(input.uv, render.time) + base + bloomLit * vec3f(0.72, 1.02, 0.86) * bloomPulse + causticLit;
 
   let noise = (hash21(input.uv * render.viewport + vec2f(render.time * 17.0, 0.0)) - 0.5) / 255.0;
   color += noise;
