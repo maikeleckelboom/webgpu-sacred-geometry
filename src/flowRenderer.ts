@@ -4,6 +4,23 @@ const FLOATS_PER_PARTICLE = 12;
 const UNIFORM_FLOATS = 14;
 const TRAIL_DECAY = 0.965;
 
+const BLOOM_LEVELS = 5;
+const BLOOM_BASE_MAX = 640;
+const BLOOM_THRESHOLD = 0.6;
+const BLOOM_SOFT_KNEE = 0.7;
+const BLOOM_INTENSITY = 0.8;
+const BLOOM_UPSAMPLE_WEIGHT = 0.62;
+const BLOOM_EXPOSURE = 1.1;
+const BLOOM_SHADING = 0.5;
+const BLOOM_GAMMA = 1.0 / 2.4;
+
+function bloomCurve(threshold: number, softKnee: number): {
+  curve: [number, number, number, number];
+} {
+  const knee = threshold * softKnee + 0.0001;
+  return { curve: [threshold - knee, knee * 2, 0.25 / knee, 0] };
+}
+
 export type FieldMode = "flow" | "topo" | "arch" | "waves";
 
 const MODE_INDEX: Record<FieldMode, number> = {
@@ -405,7 +422,7 @@ fn lineFragment(input: VertexOut) -> @location(0) vec4f {
   let headFade = smoothstep(0.0, 0.16, input.local.x);
   let tailFade = 1.0 - smoothstep(0.82, 1.0, input.local.x) * 0.24;
   let alpha = input.alpha * side * headFade * tailFade;
-  return vec4f(input.color * 1.2, alpha);
+  return vec4f(input.color * 2.4, alpha);
 }
 
 @vertex
@@ -456,7 +473,7 @@ fn spriteFragment(input: VertexOut) -> @location(0) vec4f {
   let disc = smoothstep(1.0, 0.16, distance);
   let core = smoothstep(0.48, 0.0, distance);
   let alpha = input.alpha * (disc * 0.72 + core * 0.5);
-  return vec4f(input.color * (0.9 + core * 0.95), alpha);
+  return vec4f(input.color * (1.7 + core * 2.4), alpha);
 }
 `;
 
@@ -501,8 +518,69 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
   let scene = textureSample(sceneTexture, accumSampler, input.uv).rgb;
   let decayed = prev * accum.decay;
   let combined = decayed + scene;
-  let saturated = combined / (1.0 + combined * 0.2);
+  let saturated = combined / (1.0 + combined * 0.045);
   return vec4f(saturated, 1.0);
+}
+`;
+
+const bloomShader = /* wgsl */ `
+struct BloomPref {
+  curve: vec4f,
+}
+
+struct VertexOut {
+  @builtin(position) position: vec4f,
+  @location(0) uv: vec2f,
+}
+
+@vertex
+fn bloomVertex(@builtin(vertex_index) vertexIndex: u32) -> VertexOut {
+  let positions = array<vec2f, 3>(
+    vec2f(-1.0, -1.0),
+    vec2f(3.0, -1.0),
+    vec2f(-1.0, 3.0),
+  );
+  let position = positions[vertexIndex];
+
+  var out: VertexOut;
+  out.position = vec4f(position, 0.0, 1.0);
+  out.uv = position * 0.5 + vec2f(0.5, 0.5);
+  return out;
+}
+
+@group(0) @binding(0) var bloomSampler: sampler;
+@group(0) @binding(1) var bloomSource: texture_2d<f32>;
+@group(0) @binding(2) var bloomHigh: texture_2d<f32>;
+@group(0) @binding(3) var<uniform> prefilterUniform: BloomPref;
+
+@fragment
+fn bloomPrefilter(input: VertexOut) -> @location(0) vec4f {
+  let c = textureSample(bloomSource, bloomSampler, input.uv).rgb;
+  let br = max(c.r, max(c.g, c.b));
+  var rq = clamp(br - prefilterUniform.curve.x, 0.0, prefilterUniform.curve.y);
+  rq = prefilterUniform.curve.z * rq * rq;
+  let contribution = max(rq, br - prefilterUniform.curve.w) / max(br, 0.0001);
+  return vec4f(c * contribution, 1.0);
+}
+
+@fragment
+fn bloomDownsample(input: VertexOut) -> @location(0) vec4f {
+  let dims = textureDimensions(bloomSource, 0);
+  let tx = 1.0 / vec2f(f32(dims.x), f32(dims.y));
+  let uv = input.uv;
+  let c = textureSample(bloomSource, bloomSampler, uv);
+  let l = textureSample(bloomSource, bloomSampler, uv + vec2f(-tx.x, 0.0));
+  let r = textureSample(bloomSource, bloomSampler, uv + vec2f(tx.x, 0.0));
+  let t = textureSample(bloomSource, bloomSampler, uv + vec2f(0.0, tx.y));
+  let b = textureSample(bloomSource, bloomSampler, uv + vec2f(0.0, -tx.y));
+  return (c + l + r + t + b) * 0.2;
+}
+
+@fragment
+fn bloomUpsample(input: VertexOut) -> @location(0) vec4f {
+  let lo = textureSample(bloomSource, bloomSampler, input.uv);
+  let hi = textureSample(bloomHigh, bloomSampler, input.uv);
+  return lo + hi * ${BLOOM_UPSAMPLE_WEIGHT.toFixed(4)};
 }
 `;
 
@@ -515,8 +593,9 @@ struct Render {
   viewport: vec2f,
   pointer: vec2f,
   pointerStrength: f32,
-  fieldGain: f32,
-  padding: vec2f,
+  bloomIntensity: f32,
+  exposure: f32,
+  shadingStrength: f32,
 }
 
 struct VertexOut {
@@ -526,7 +605,8 @@ struct VertexOut {
 
 @group(0) @binding(0) var postSampler: sampler;
 @group(0) @binding(1) var historyTexture: texture_2d<f32>;
-@group(0) @binding(2) var<uniform> render: Render;
+@group(0) @binding(2) var bloomTexture: texture_2d<f32>;
+@group(0) @binding(3) var<uniform> render: Render;
 
 @vertex
 fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOut {
@@ -597,24 +677,47 @@ fn skyColor(uv: vec2f, time: f32) -> vec3f {
   return color;
 }
 
+fn linearToGamma(c: vec3f) -> vec3f {
+  let x = max(c, vec3f(0.0));
+  return max(1.055 * pow(x, vec3f(${BLOOM_GAMMA.toFixed(4)})) - vec3f(0.055), vec3f(0.0));
+}
+
+fn acesFilmic(c: vec3f) -> vec3f {
+  let a = 2.51;
+  let b = 0.03;
+  let c2 = 2.43;
+  let d = 0.59;
+  let e = 0.14;
+  return clamp((c * (a * c + b)) / (c * (c2 * c + d) + e), vec3f(0.0), vec3f(1.0));
+}
+
+fn fakeShading(uv: vec2f, base: vec3f) -> vec3f {
+  let tx = 1.0 / max(render.viewport, vec2f(1.0, 1.0));
+  let lc = textureSample(historyTexture, postSampler, uv + vec2f(-tx.x, 0.0)).rgb;
+  let rc = textureSample(historyTexture, postSampler, uv + vec2f(tx.x, 0.0)).rgb;
+  let tc = textureSample(historyTexture, postSampler, uv + vec2f(0.0, tx.y)).rgb;
+  let bc = textureSample(historyTexture, postSampler, uv + vec2f(0.0, -tx.y)).rgb;
+  let dx = length(rc) - length(lc);
+  let dy = length(tc) - length(bc);
+  let n = normalize(vec3f(dx, dy, 0.35));
+  let l = vec3f(0.0, 0.0, 1.0);
+  let diffuse = clamp(dot(n, l) + 0.7, 0.7, 1.0);
+  return mix(base, base * diffuse, render.shadingStrength);
+}
+
 @fragment
 fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
-  let texel = 1.0 / max(render.viewport, vec2f(1.0, 1.0));
-  let scene = textureSample(historyTexture, postSampler, input.uv).rgb;
+  let dye = textureSample(historyTexture, postSampler, input.uv).rgb;
+  let base = fakeShading(input.uv, dye);
 
-  var bloom = scene * 0.62;
-  bloom += textureSample(historyTexture, postSampler, input.uv + texel * vec2f(2.5, 0.0)).rgb * 0.16;
-  bloom += textureSample(historyTexture, postSampler, input.uv + texel * vec2f(-2.5, 0.0)).rgb * 0.16;
-  bloom += textureSample(historyTexture, postSampler, input.uv + texel * vec2f(0.0, 2.5)).rgb * 0.14;
-  bloom += textureSample(historyTexture, postSampler, input.uv + texel * vec2f(0.0, -2.5)).rgb * 0.14;
-  bloom += textureSample(historyTexture, postSampler, input.uv + texel * vec2f(3.5, 3.5)).rgb * 0.07;
-  bloom += textureSample(historyTexture, postSampler, input.uv + texel * vec2f(-3.5, -3.5)).rgb * 0.07;
+  var bloom = textureSample(bloomTexture, postSampler, input.uv).rgb * render.bloomIntensity;
+  bloom = linearToGamma(bloom);
 
   let r1 = ridge(input.uv, render.time);
   let r2 = ridge2(input.uv * vec2f(1.0, 1.1) + vec2f(13.7, 7.1), render.time);
-  let sceneMag = length(scene);
-  let causticMask = smoothstep(0.0, 0.4, sceneMag);
-  let causticCore = smoothstep(0.04, 0.32, sceneMag);
+  let dyeMag = length(dye);
+  let causticMask = smoothstep(0.0, 0.4, dyeMag);
+  let causticCore = smoothstep(0.04, 0.32, dyeMag);
   let causticColor = vec3f(0.45, 0.95, 0.78) * r1 * 0.55 + vec3f(0.32, 0.78, 1.0) * r2 * 0.42;
   let caustic = causticColor * causticMask * causticCore;
 
@@ -628,11 +731,15 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
   let bloomLit = bloom * (1.0 + pointerLight * 1.1);
 
   let bloomPulse = 0.86 + 0.14 * smoothstep(0.0, 1.0, sin(render.time * 0.6) * 0.5 + 0.5);
-  let sceneLight = scene * 0.78 + bloomLit * vec3f(0.72, 1.02, 0.86) * bloomPulse;
   let pointerColor = (vec3f(0.34, 0.86, 0.62) * pointerHalo + vec3f(0.7, 0.96, 0.82) * pointerCore) * render.pointerStrength * 0.28;
-  let color = skyColor(input.uv, render.time) + sceneLight + causticLit + pointerColor;
-  let toneMapped = vec3f(1.0) - exp(-color * vec3f(1.02, 0.9, 0.98));
-  return vec4f(toneMapped, 1.0);
+  var color = skyColor(input.uv, render.time) + base + bloomLit * vec3f(0.72, 1.02, 0.86) * bloomPulse + causticLit + pointerColor;
+
+  let noise = (hash21(input.uv * render.viewport + vec2f(render.time * 17.0, 0.0)) - 0.5) / 255.0;
+  color += noise;
+
+  let exposed = color * render.exposure;
+  let toned = acesFilmic(exposed);
+  return vec4f(linearToGamma(toned), 1.0);
 }
 `;
 
@@ -701,6 +808,19 @@ export async function startFlowFieldRenderer(
     size: UNIFORM_FLOATS * Float32Array.BYTES_PER_ELEMENT,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
+  const bloomPrefBuffer = device.createBuffer({
+    label: "flow bloom prefilter uniforms",
+    size: 16,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+  const prefCurve = bloomCurve(BLOOM_THRESHOLD, BLOOM_SOFT_KNEE).curve;
+  const bloomPrefUniforms = new Float32Array([
+    prefCurve[0],
+    prefCurve[1],
+    prefCurve[2],
+    BLOOM_THRESHOLD,
+  ]);
+  device.queue.writeBuffer(bloomPrefBuffer, 0, bloomPrefUniforms);
   const computeModule = device.createShaderModule({
     label: "flow compute shader",
     code: computeShader,
@@ -716,6 +836,10 @@ export async function startFlowFieldRenderer(
   const postModule = device.createShaderModule({
     label: "flow post shader",
     code: postShader,
+  });
+  const bloomModule = device.createShaderModule({
+    label: "flow bloom shader",
+    code: bloomShader,
   });
   const computePipeline = device.createComputePipeline({
     label: "flow compute pipeline",
@@ -768,6 +892,54 @@ export async function startFlowFieldRenderer(
       module: postModule,
       entryPoint: "fragmentMain",
       targets: [{ format }],
+    },
+    primitive: {
+      topology: "triangle-list",
+    },
+  });
+  const bloomPrefilterPipeline = device.createRenderPipeline({
+    label: "flow bloom prefilter pipeline",
+    layout: "auto",
+    vertex: {
+      module: bloomModule,
+      entryPoint: "bloomVertex",
+    },
+    fragment: {
+      module: bloomModule,
+      entryPoint: "bloomPrefilter",
+      targets: [{ format: offscreenFormat }],
+    },
+    primitive: {
+      topology: "triangle-list",
+    },
+  });
+  const bloomDownPipeline = device.createRenderPipeline({
+    label: "flow bloom downsample pipeline",
+    layout: "auto",
+    vertex: {
+      module: bloomModule,
+      entryPoint: "bloomVertex",
+    },
+    fragment: {
+      module: bloomModule,
+      entryPoint: "bloomDownsample",
+      targets: [{ format: offscreenFormat }],
+    },
+    primitive: {
+      topology: "triangle-list",
+    },
+  });
+  const bloomUpPipeline = device.createRenderPipeline({
+    label: "flow bloom upsample pipeline",
+    layout: "auto",
+    vertex: {
+      module: bloomModule,
+      entryPoint: "bloomVertex",
+    },
+    fragment: {
+      module: bloomModule,
+      entryPoint: "bloomUpsample",
+      targets: [{ format: offscreenFormat }],
     },
     primitive: {
       topology: "triangle-list",
@@ -826,6 +998,13 @@ export async function startFlowFieldRenderer(
   let historyB: GPUTexture | null = null;
   let historyViewA: GPUTextureView | null = null;
   let historyViewB: GPUTextureView | null = null;
+  let bloomDownTextures: GPUTexture[] = [];
+  let bloomDownViews: GPUTextureView[] = [];
+  let bloomUpTextures: GPUTexture[] = [];
+  let bloomUpViews: GPUTextureView[] = [];
+  let bloomDownBindGroups: GPUBindGroup[] = [];
+  let bloomUpBindGroups: GPUBindGroup[] = [];
+  let bloomReady = false;
   let sourceIndex = 0;
   let historyIndex = 0;
   let lastTime = 0;
@@ -905,6 +1084,19 @@ export async function startFlowFieldRenderer(
     sceneTexture?.destroy();
     historyA?.destroy();
     historyB?.destroy();
+    for (const tex of bloomDownTextures) {
+      tex.destroy();
+    }
+    for (const tex of bloomUpTextures) {
+      tex.destroy();
+    }
+    bloomDownTextures = [];
+    bloomDownViews = [];
+    bloomUpTextures = [];
+    bloomUpViews = [];
+    bloomDownBindGroups = [];
+    bloomUpBindGroups = [];
+    bloomReady = false;
 
     const size = { width: canvas.width, height: canvas.height };
 
@@ -929,6 +1121,64 @@ export async function startFlowFieldRenderer(
 
     historyViewA = historyA.createView();
     historyViewB = historyB.createView();
+
+    let bloomW = Math.max(1, Math.floor(canvas.width / 2));
+    let bloomH = Math.max(1, Math.floor(canvas.height / 2));
+    const bloomScale = Math.min(1, BLOOM_BASE_MAX / Math.max(bloomW, bloomH));
+    bloomW = Math.max(1, Math.floor(bloomW * bloomScale));
+    bloomH = Math.max(1, Math.floor(bloomH * bloomScale));
+
+    for (let level = 0; level < BLOOM_LEVELS; level += 1) {
+      const tex = device.createTexture({
+        label: `flow bloom down ${level}`,
+        size: { width: bloomW, height: bloomH },
+        format: offscreenFormat,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+      });
+      bloomDownTextures.push(tex);
+      bloomDownViews.push(tex.createView());
+      if (level < BLOOM_LEVELS - 1) {
+        const upTex = device.createTexture({
+          label: `flow bloom up ${level}`,
+          size: { width: bloomW, height: bloomH },
+          format: offscreenFormat,
+          usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+        });
+        bloomUpTextures.push(upTex);
+        bloomUpViews.push(upTex.createView());
+      }
+      bloomW = Math.max(1, Math.floor(bloomW / 2));
+      bloomH = Math.max(1, Math.floor(bloomH / 2));
+    }
+
+    for (let level = 1; level < BLOOM_LEVELS; level += 1) {
+      bloomDownBindGroups.push(
+        device.createBindGroup({
+          label: `flow bloom down bind ${level}`,
+          layout: bloomDownPipeline.getBindGroupLayout(0),
+          entries: [
+            { binding: 0, resource: linearSampler },
+            { binding: 1, resource: bloomDownViews[level - 1] },
+          ],
+        }),
+      );
+    }
+    const lastDown = BLOOM_LEVELS - 1;
+    for (let level = 0; level < BLOOM_LEVELS - 1; level += 1) {
+      const hiView = level === lastDown - 1 ? bloomDownViews[lastDown] : bloomUpViews[level + 1];
+      bloomUpBindGroups.push(
+        device.createBindGroup({
+          label: `flow bloom up bind ${level}`,
+          layout: bloomUpPipeline.getBindGroupLayout(0),
+          entries: [
+            { binding: 0, resource: linearSampler },
+            { binding: 1, resource: bloomDownViews[level] },
+            { binding: 2, resource: hiView },
+          ],
+        }),
+      );
+    }
+    bloomReady = true;
 
     const clearEncoder = device.createCommandEncoder({ label: "flow initial history clear" });
     const clearPass = clearEncoder.beginRenderPass({
@@ -1008,9 +1258,9 @@ export async function startFlowFieldRenderer(
       pointer.x,
       pointer.y,
       pointer.strength,
-      1,
-      0,
-      0,
+      BLOOM_INTENSITY,
+      BLOOM_EXPOSURE,
+      BLOOM_SHADING,
       0,
       0,
     ]);
@@ -1103,13 +1353,78 @@ export async function startFlowFieldRenderer(
       accumPass.draw(3);
       accumPass.end();
 
+      if (bloomReady && bloomDownViews.length === BLOOM_LEVELS && bloomUpViews.length === BLOOM_LEVELS - 1) {
+        const prefilterBindGroup = device.createBindGroup({
+          label: "flow bloom prefilter bind group",
+          layout: bloomPrefilterPipeline.getBindGroupLayout(0),
+          entries: [
+            { binding: 0, resource: linearSampler },
+            { binding: 1, resource: accumWriteView },
+            { binding: 3, resource: { buffer: bloomPrefBuffer } },
+          ],
+        });
+        const prefilterPass = encoder.beginRenderPass({
+          label: "flow bloom prefilter pass",
+          colorAttachments: [
+            {
+              view: bloomDownViews[0],
+              loadOp: "clear",
+              clearValue: { r: 0, g: 0, b: 0, a: 0 },
+              storeOp: "store",
+            },
+          ],
+        });
+        prefilterPass.setPipeline(bloomPrefilterPipeline);
+        prefilterPass.setBindGroup(0, prefilterBindGroup);
+        prefilterPass.draw(3);
+        prefilterPass.end();
+
+        for (let level = 1; level < BLOOM_LEVELS; level += 1) {
+          const downPass = encoder.beginRenderPass({
+            label: `flow bloom down pass ${level}`,
+            colorAttachments: [
+              {
+                view: bloomDownViews[level],
+                loadOp: "clear",
+                clearValue: { r: 0, g: 0, b: 0, a: 0 },
+                storeOp: "store",
+              },
+            ],
+          });
+          downPass.setPipeline(bloomDownPipeline);
+          downPass.setBindGroup(0, bloomDownBindGroups[level - 1]);
+          downPass.draw(3);
+          downPass.end();
+        }
+
+        for (let level = BLOOM_LEVELS - 2; level >= 0; level -= 1) {
+          const upPass = encoder.beginRenderPass({
+            label: `flow bloom up pass ${level}`,
+            colorAttachments: [
+              {
+                view: bloomUpViews[level],
+                loadOp: "clear",
+                clearValue: { r: 0, g: 0, b: 0, a: 0 },
+                storeOp: "store",
+              },
+            ],
+          });
+          upPass.setPipeline(bloomUpPipeline);
+          upPass.setBindGroup(0, bloomUpBindGroups[level]);
+          upPass.draw(3);
+          upPass.end();
+        }
+      }
+
+      const bloomView = bloomReady ? bloomUpViews[0] : accumWriteView;
       const postBindGroup = device.createBindGroup({
         label: "flow post bind group",
         layout: postPipeline.getBindGroupLayout(0),
         entries: [
           { binding: 0, resource: linearSampler },
           { binding: 1, resource: accumWriteView },
-          { binding: 2, resource: { buffer: renderBuffer } },
+          { binding: 2, resource: bloomView },
+          { binding: 3, resource: { buffer: renderBuffer } },
         ],
       });
 
@@ -1171,11 +1486,18 @@ export async function startFlowFieldRenderer(
       sceneTexture?.destroy();
       historyA?.destroy();
       historyB?.destroy();
+      for (const tex of bloomDownTextures) {
+        tex.destroy();
+      }
+      for (const tex of bloomUpTextures) {
+        tex.destroy();
+      }
       particleBuffers[0].destroy();
       particleBuffers[1].destroy();
       simBuffer.destroy();
       renderBuffer.destroy();
       accumBuffer.destroy();
+      bloomPrefBuffer.destroy();
     },
     setMode: (mode: FieldMode) => {
       const nextActive = MODE_INDEX[mode] ?? 0;
