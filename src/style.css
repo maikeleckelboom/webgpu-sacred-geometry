@@ -50,6 +50,19 @@ body.living-glass-page-body .lab-header {
   --lab-active: #89ffc1;
 }
 
+body.flow-page-body.flow-page-body--light {
+  color-scheme: light;
+  background: #eef3ef;
+}
+
+body.flow-page-body.flow-page-body--light .lab-header {
+  --lab-surface: rgba(238, 243, 239, 0.88);
+  --lab-text: #06343a;
+  --lab-muted: rgba(6, 52, 58, 0.62);
+  --lab-border: rgba(15, 77, 82, 0.14);
+  --lab-active: #0b6872;
+}
+
 #app {
   position: relative;
   display: block;
@@ -205,6 +218,13 @@ body.living-glass-page-body .lab-header {
   --study-status-border: rgba(120, 255, 196, 0.32);
 }
 
+.study-page--flow.is-flow-light {
+  --study-bg: #eef3ef;
+  --study-text: #06343a;
+  --study-status-bg: rgba(248, 251, 247, 0.92);
+  --study-status-border: rgba(15, 77, 82, 0.18);
+}
+
 .study-page--architecture {
   --study-bg: #f2f2ee;
 }
@@ -229,6 +249,105 @@ body.living-glass-page-body .lab-header {
 
 .waves-canvas {
   background: #f8f7f2;
+}
+
+.study-page--flow.is-flow-light .flow-canvas {
+  background: #eef3ef;
+}
+
+.flow-theme-toggle {
+  position: fixed;
+  z-index: 6;
+  bottom: 1rem;
+  left: 1rem;
+  display: inline-flex;
+  width: 6.85rem;
+  min-height: 2.45rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.52rem;
+  padding: 0.35rem 0.62rem;
+  border: 1px solid rgba(137, 255, 193, 0.2);
+  border-radius: 999px;
+  color: #f5fff6;
+  background: rgba(2, 5, 8, 0.72);
+  box-shadow: 0 0.7rem 2rem rgba(0, 0, 0, 0.22);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 720;
+  letter-spacing: 0;
+  backdrop-filter: blur(14px);
+}
+
+.flow-theme-toggle:hover,
+.flow-theme-toggle:focus-visible {
+  border-color: rgba(137, 255, 193, 0.46);
+  background: rgba(6, 12, 16, 0.84);
+}
+
+.flow-theme-toggle:focus-visible {
+  outline: 2px solid rgba(137, 255, 193, 0.74);
+  outline-offset: 3px;
+}
+
+.flow-theme-toggle__track {
+  position: relative;
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 1.05rem;
+  border: 1px solid rgba(245, 255, 246, 0.22);
+  border-radius: 999px;
+  background: rgba(245, 255, 246, 0.12);
+}
+
+.flow-theme-toggle__thumb {
+  position: absolute;
+  top: 0.15rem;
+  left: 0.16rem;
+  width: 0.66rem;
+  height: 0.66rem;
+  border-radius: 50%;
+  background: #89ffc1;
+  box-shadow: 0 0 0.9rem rgba(137, 255, 193, 0.58);
+  transition:
+    transform 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.flow-theme-toggle__label {
+  display: inline-block;
+  min-width: 2.2rem;
+  text-align: left;
+}
+
+.flow-theme-toggle.is-light {
+  border-color: rgba(15, 77, 82, 0.18);
+  color: #06343a;
+  background: rgba(248, 251, 247, 0.76);
+  box-shadow: 0 0.7rem 2rem rgba(10, 40, 38, 0.13);
+}
+
+.flow-theme-toggle.is-light:hover,
+.flow-theme-toggle.is-light:focus-visible {
+  border-color: rgba(11, 104, 114, 0.36);
+  background: rgba(255, 255, 252, 0.9);
+}
+
+.flow-theme-toggle.is-light:focus-visible {
+  outline-color: rgba(11, 104, 114, 0.6);
+}
+
+.flow-theme-toggle.is-light .flow-theme-toggle__track {
+  border-color: rgba(6, 52, 58, 0.16);
+  background: rgba(11, 104, 114, 0.12);
+}
+
+.flow-theme-toggle.is-light .flow-theme-toggle__thumb {
+  background: #0b6872;
+  box-shadow: 0 0 0.55rem rgba(11, 104, 114, 0.25);
+  transform: translateX(0.9rem);
 }
 
 .living-glass-quality {
@@ -328,6 +447,11 @@ body.living-glass-page-body .lab-header {
 
   .living-glass-quality select {
     width: 100%;
+  }
+
+  .flow-theme-toggle {
+    bottom: 0.9rem;
+    left: 0.9rem;
   }
 }
 

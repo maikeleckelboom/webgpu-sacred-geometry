@@ -64,10 +64,11 @@ export function mountStudyFrame(
   return { canvas, status };
 }
 
-export function connectStudyRenderer(
+export function connectStudyRenderer<T extends RendererHandle>(
   canvas: HTMLCanvasElement,
   status: HTMLDivElement,
-  startRenderer: (canvas: HTMLCanvasElement) => Promise<RendererHandle>,
+  startRenderer: (canvas: HTMLCanvasElement) => Promise<T>,
+  onRenderer?: (renderer: T) => void,
 ): PageHandle {
   const abortController = new AbortController();
   let renderer: RendererHandle | null = null;
@@ -94,6 +95,7 @@ export function connectStudyRenderer(
       }
 
       renderer = activeRenderer;
+      onRenderer?.(activeRenderer);
     })
     .catch((error: unknown) => {
       if (disposed) {

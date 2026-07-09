@@ -22,6 +22,7 @@ struct Render {
   modeTopo: f32,
   modeArch: f32,
   modeWaves: f32,
+  themeLight: f32,
 }
 
 struct VertexOut {
@@ -368,6 +369,28 @@ fn skyColor(uv: vec2f, time: f32) -> vec3f {
   return color;
 }
 
+fn lightSkyColor(uv: vec2f, time: f32) -> vec3f {
+  let vertical = smoothstep(0.0, 1.0, uv.y);
+  var color = mix(vec3f(0.91, 0.94, 0.91), vec3f(0.81, 0.91, 0.89), vertical);
+
+  let n1 = snoise2(uv * vec2f(2.1, 1.4) + vec2f(time * 0.013, -time * 0.009));
+  let n2 = snoise2(uv * vec2f(3.4, 2.3) + vec2f(-time * 0.017, time * 0.011 + 4.7));
+  let nebula = n1 * 0.6 + n2 * 0.4;
+  color += vec3f(0.018, 0.026, 0.016) * max(nebula, 0.0) * smoothstep(0.08, 0.92, uv.y);
+  color -= vec3f(0.024, 0.018, 0.012) * max(-nebula, 0.0) * smoothstep(0.12, 0.95, uv.y);
+
+  let fieldCoord = uv * 2.0 - 1.0;
+  let flow = flowVector(fieldCoord, time);
+  let flowEnergy = clamp(length(flow) * 4.2, 0.0, 1.0);
+  let contour = ridge(uv + flow * 0.025, time) * 0.45 + ridge2(uv * vec2f(1.0, 1.1) + flow * 0.018 + vec2f(13.7, 7.1), time) * 0.32;
+  color -= vec3f(0.024, 0.052, 0.05) * contour * (0.22 + flowEnergy * 0.78);
+  color += vec3f(0.026, 0.046, 0.04) * flowEnergy * smoothstep(0.18, 0.96, uv.y) * 0.18;
+
+  let paper = hash21(uv * vec2f(740.0, 420.0) + vec2f(time * 0.7, 0.0)) - 0.5;
+  color += paper * 0.008;
+  return clamp(color, vec3f(0.0), vec3f(1.0));
+}
+
 fn linearToGamma(c: vec3f) -> vec3f {
   let x = max(c, vec3f(0.0));
   return max(1.055 * pow(x, vec3f(BLOOM_GAMMA)) - vec3f(0.055), vec3f(0.0));
@@ -473,10 +496,35 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
   let pressureHalo = particleHalo * pressure * 0.18;
   let pressureGlow = pressureHalo * vec3f(0.42, 0.78, 1.0) * render.pointerStrength;
 
+  let noise = (hash21(input.uv * render.viewport + vec2f(render.time * 17.0, 0.0)) - 0.5) / 255.0;
+
+  if (render.themeLight > 0.5) {
+    let flowPaint = base * 0.96 + bloomLit * vec3f(0.52, 0.82, 0.74) * 0.42 + causticLit * 0.58 + chargeGlow * 0.34 + pressureGlow * 0.4;
+    let paintEnergy = clamp(length(flowPaint) * 0.52 + dyeMag * 0.18 + particleHalo * 0.18, 0.0, 1.0);
+    let inkBody = smoothstep(0.006, 0.34, dyeMag);
+    let haloBody = smoothstep(0.012, 0.5, particleHalo + length(bloomLit) * 0.22);
+    let cyanInk = vec3f(0.018, 0.22, 0.25);
+    let greenInk = vec3f(0.0, 0.34, 0.3);
+    let violetInk = vec3f(0.22, 0.18, 0.42);
+    let flowHue = clamp(length(base.gb) * 0.12 + r1 * 0.22 + r2 * 0.18, 0.0, 1.0);
+    var ink = mix(cyanInk, greenInk, flowHue);
+    ink = mix(ink, violetInk, smoothstep(0.34, 0.96, bloomLit.b + causticLit.b * 0.5) * 0.34);
+
+    var lightColor = lightSkyColor(input.uv, render.time);
+    lightColor += vec3f(0.0, 0.28, 0.26) * haloBody * 0.1;
+    lightColor += vec3f(0.22, 0.17, 0.48) * r2 * haloBody * 0.05;
+    lightColor += vec3f(0.67, 0.48, 0.16) * pressure * render.pointerStrength * particleHalo * 0.07;
+    lightColor = mix(lightColor, ink, clamp(inkBody * 0.78 + paintEnergy * 0.28 + haloBody * 0.12, 0.0, 0.9));
+    lightColor -= vec3f(0.0, 0.08, 0.07) * particleCore * 0.07;
+    lightColor += noise * 0.65;
+
+    let edge = smoothstep(0.55, 1.24, length((input.uv - vec2f(0.5)) * vec2f(render.aspect, 1.0)));
+    lightColor = mix(lightColor, lightColor * vec3f(0.96, 0.98, 0.97), edge * 0.3);
+    return vec4f(linearToGamma(clamp(lightColor, vec3f(0.0), vec3f(1.0))), 1.0);
+  }
+
   let bloomPulse = 0.86 + 0.14 * smoothstep(0.0, 1.0, sin(render.time * 0.6) * 0.5 + 0.5);
   var color = skyColor(input.uv, render.time) + base * 1.28 + bloomLit * vec3f(0.72, 1.0, 0.88) * bloomPulse + causticLit * 1.32 + chargeGlow + pressureGlow;
-
-  let noise = (hash21(input.uv * render.viewport + vec2f(render.time * 17.0, 0.0)) - 0.5) / 255.0;
   color += noise;
 
   let contrasted = pow(max(color, vec3f(0.0)), vec3f(1.14 - pressure * 0.06));

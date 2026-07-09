@@ -33,6 +33,7 @@ function bloomCurve(threshold: number, softKnee: number): {
 }
 
 export type FieldMode = "flow" | "topo" | "arch" | "waves";
+export type FlowTheme = "dark" | "light";
 
 const MODE_INDEX: Record<FieldMode, number> = {
   flow: 0,
@@ -53,10 +54,12 @@ interface PointerState {
 export interface FlowFieldRenderer {
   destroy: () => void;
   setMode: (mode: FieldMode) => void;
+  setTheme: (theme: FlowTheme) => void;
 }
 
 export async function startFlowFieldRenderer(
   canvas: HTMLCanvasElement,
+  initialTheme: FlowTheme = "dark",
 ): Promise<FlowFieldRenderer> {
   if (!navigator.gpu) {
     throw new Error(
@@ -313,6 +316,7 @@ export async function startFlowFieldRenderer(
   let animationFrame = 0;
   let active = true;
   let checkedFirstFrame = false;
+  let flowTheme: FlowTheme = initialTheme;
 
   function updatePointerFromClient(clientX: number, clientY: number): boolean {
     const rect = canvas.getBoundingClientRect();
@@ -633,7 +637,7 @@ export async function startFlowFieldRenderer(
       currentWeights[2],
       currentWeights[3],
       currentWeights[4],
-      0,
+      flowTheme === "light" ? 1 : 0,
       0,
       0,
       0,
@@ -880,6 +884,9 @@ export async function startFlowFieldRenderer(
       for (let i = 0; i < 5; i += 1) {
         targetWeights[i] = i === nextActive ? 1 : 0;
       }
+    },
+    setTheme: (theme: FlowTheme) => {
+      flowTheme = theme;
     },
   };
 
