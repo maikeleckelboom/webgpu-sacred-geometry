@@ -193,10 +193,10 @@ export const defaultVisualControls = {
     flow: {
       levels: 5,
       baseMax: 640,
-      threshold: 0.6,
+      threshold: 0.5,
       softKnee: 0.7,
-      intensity: 1.0,
-      exposure: 0.9,
+      intensity: 1.08,
+      exposure: 1.04,
       shadingStrength: 0.5,
     },
   },

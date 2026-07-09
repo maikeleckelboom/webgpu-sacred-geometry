@@ -69,7 +69,7 @@ fn fieldColor(particle: Particle, time: f32) -> vec3f {
   let metric = max(max(speedN, curlN * 0.85), energyN * 0.6);
 
   let surge = 0.55 + 0.24 * sin(time * 0.12) + 0.13 * sin(time * 0.29 + 1.3) + 0.38 * pow(max(0.0, sin(time * 0.15)), 24.0);
-  let intensity = (0.06 + pow(metric, 2.4) * 6.5) * clamp(surge, 0.32, 1.4);
+  let intensity = (0.1 + pow(metric, 2.05) * 7.4) * clamp(surge, 0.34, 1.45);
 
   return color * intensity;
 }
@@ -119,7 +119,7 @@ fn lineVertex(
   out.color = fieldColor(particle, render.time);
   out.color = out.color * (1.0 + pointerWake * 1.2 + vectorCharge * 2.35);
   out.color = out.color + vec3f(1.0, 0.94, 0.74) * glintShimmer * 1.15;
-  let baseAlpha = 0.052 + abs(particle.mCurl) * 4.9 + speed * 0.76 + particle.mEnergy * 0.46;
+  let baseAlpha = 0.072 + abs(particle.mCurl) * 5.7 + speed * 0.9 + particle.mEnergy * 0.56;
   out.alpha = render.opacity * mask * lifeFade(particle) * headShimmer * (baseAlpha + glintShimmer * 0.11 + pointerWake * 0.12 + vectorCharge * 0.18);
   return out;
 }

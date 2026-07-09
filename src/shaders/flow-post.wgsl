@@ -447,12 +447,13 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
   let r1 = ridge(input.uv, render.time);
   let r2 = ridge2(input.uv * vec2f(1.0, 1.1) + vec2f(13.7, 7.1), render.time);
   let dyeMag = length(dye);
-  let causticMask = smoothstep(0.18, 0.7, dyeMag);
-  let causticCore = smoothstep(0.25, 0.7, dyeMag);
-  let causticColor = vec3f(0.45, 0.95, 0.78) * r1 * 0.54 + vec3f(0.32, 0.78, 1.0) * r2 * 0.38;
-  let caustic = causticColor * causticMask * causticCore;
-
   let particleHalo = localAccumulationHalo(input.uv);
+  let causticMask = smoothstep(0.05, 0.42, dyeMag);
+  let causticCore = smoothstep(0.08, 0.5, dyeMag);
+  let causticColor = vec3f(0.45, 0.95, 0.78) * r1 * 0.68 + vec3f(0.32, 0.78, 1.0) * r2 * 0.48;
+  let artifactVeil = smoothstep(0.08, 0.62, particleHalo + dyeMag * 0.2);
+  let caustic = causticColor * (causticMask * causticCore + artifactVeil * 0.22);
+
   let particleCore = smoothstep(0.12, 0.72, dyeMag);
   let particleLight = (particleHalo * 0.88 + particleCore * 0.28) * render.pointerStrength * (1.0 + pressure * PRESSURE_LIGHT_BOOST);
   let causticLit = caustic * (1.0 + particleLight * 1.4);
@@ -466,7 +467,7 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
   let pressureGlow = pressureHalo * vec3f(0.42, 0.78, 1.0) * render.pointerStrength;
 
   let bloomPulse = 0.86 + 0.14 * smoothstep(0.0, 1.0, sin(render.time * 0.6) * 0.5 + 0.5);
-  var color = skyColor(input.uv, render.time) + base * 1.08 + bloomLit * vec3f(0.68, 0.96, 0.82) * bloomPulse + causticLit * 1.18 + chargeGlow + pressureGlow;
+  var color = skyColor(input.uv, render.time) + base * 1.28 + bloomLit * vec3f(0.72, 1.0, 0.88) * bloomPulse + causticLit * 1.32 + chargeGlow + pressureGlow;
 
   let noise = (hash21(input.uv * render.viewport + vec2f(render.time * 17.0, 0.0)) - 0.5) / 255.0;
   color += noise;
