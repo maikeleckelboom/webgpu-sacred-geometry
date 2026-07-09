@@ -1,7 +1,7 @@
 
 const GOLDEN_ANGLE = 2.39996322972865332;
 const FIELD_EPS = 0.045;
-const PRESSURE_SWIRL_BOOST = 1.60;
+const PRESSURE_SWIRL_BOOST = 0.65;
 const VELOCITY_GAIN = 1.35;
 
 struct Particle {
@@ -186,11 +186,11 @@ fn mouseField(point: vec2f) -> vec2f {
   let r = length(d) + 0.001;
   let toward = d / r;
   let tangent = vec2f(-toward.y, toward.x);
-  let radius = 0.45 + sim.pressure * 0.35;
+  let radius = 0.34 + sim.pressure * 0.12;
   let falloff = (1.0 - smoothstep(0.02, radius, r)) * sim.pointerStrength;
   let core = 1.0 - smoothstep(0.0, 0.08, r);
   let charge = 1.0 + sim.pressure * PRESSURE_SWIRL_BOOST;
-  return (tangent * falloff * 0.18 + toward * falloff * 0.04 - toward * core * sim.pointerStrength * 0.1) * charge;
+  return (tangent * falloff * 0.12 + toward * falloff * 0.025 - toward * core * sim.pointerStrength * 0.045) * charge;
 }
 
 fn spawn(seed: f32, epoch: f32) -> Particle {
@@ -256,4 +256,3 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u) {
 
   targetParticles[index] = particle;
 }
-
