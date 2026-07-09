@@ -3,7 +3,6 @@ import { startFlowFieldRenderer, type FieldMode, type FlowFieldRenderer } from "
 import { mountStudyFrame, type PageHandle } from "./studyFrame";
 
 const ROUTE_TO_MODE: Record<string, FieldMode> = {
-  mandala: "mandala",
   "flow-field": "flow",
   topography: "topo",
   architecture: "arch",

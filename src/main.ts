@@ -2,7 +2,6 @@ import "./style.css";
 import { mountArchitecturePage } from "./architecturePage";
 import { mountAuroraPage } from "./auroraPage";
 import { mountFlowFieldPage } from "./flowPage";
-import { mountMandalaPage } from "./mandalaPage";
 import { createLabHeader, setLabHeaderActive, type LabRoute } from "./navigation";
 import { mountTopographyPage } from "./topographyPage";
 import { mountWavesPage } from "./wavesPage";
@@ -22,7 +21,7 @@ if (!app) {
 const appRoot = app;
 
 const pageRoutes: Record<string, PageRoute> = {
-  "/": { mount: mountMandalaPage, route: "mandala" },
+  "/": { mount: mountFlowFieldPage, route: "flow-field" },
   "/flow-field": { mount: mountFlowFieldPage, route: "flow-field" },
   "/aurora": { mount: mountAuroraPage, route: "aurora" },
   "/topography": { mount: mountTopographyPage, route: "topography" },

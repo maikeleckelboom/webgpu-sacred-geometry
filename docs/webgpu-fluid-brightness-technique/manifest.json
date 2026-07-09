@@ -1,0 +1,17 @@
+{
+  "package": "webgpu-fluid-brightness-technique",
+  "created_for": "WebGPU fluid brightness / bloom technique handoff",
+  "files": [
+    "README.md",
+    "01_technique_breakdown.md",
+    "02_webgpu_architecture.md",
+    "03_render_graph_and_pass_order.md",
+    "04_shader_math_wgsl_templates.md",
+    "05_bloom_sunrays_color_pipeline.md",
+    "06_porting_checklist.md",
+    "07_debugging_brightness_webgpu.md",
+    "08_codex_claude_task_prompt.md",
+    "09_attribution_license.md",
+    "10_reference_constants.md"
+  ]
+}

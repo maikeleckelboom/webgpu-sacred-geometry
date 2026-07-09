@@ -1,5 +1,4 @@
 export type LabRoute =
-  | "mandala"
   | "flow-field"
   | "aurora"
   | "topography"
@@ -7,7 +6,6 @@ export type LabRoute =
   | "waves";
 
 const navItems: Array<{ route: LabRoute; href: string; label: string }> = [
-  { route: "mandala", href: "/", label: "Mandala" },
   { route: "flow-field", href: "/flow-field", label: "Flow field" },
   { route: "aurora", href: "/aurora", label: "Aurora" },
   { route: "topography", href: "/topography", label: "Topography" },

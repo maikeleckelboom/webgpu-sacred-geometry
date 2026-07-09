@@ -4,14 +4,13 @@ const FLOATS_PER_PARTICLE = 12;
 const UNIFORM_FLOATS = 14;
 const TRAIL_DECAY = 0.965;
 
-export type FieldMode = "flow" | "mandala" | "topo" | "arch" | "waves";
+export type FieldMode = "flow" | "topo" | "arch" | "waves";
 
 const MODE_INDEX: Record<FieldMode, number> = {
   flow: 0,
-  mandala: 1,
-  topo: 2,
-  arch: 3,
-  waves: 4,
+  topo: 1,
+  arch: 2,
+  waves: 3,
 };
 
 const computeShader = /* wgsl */ `
