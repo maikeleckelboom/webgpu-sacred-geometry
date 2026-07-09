@@ -1,198 +1,20 @@
-const SEGMENTS = 216;
+import { defaultVisualControls, type TopographyShapeControl } from "./visualControls";
+import topographyReliefShaderSource from "./shaders/topography-relief.wgsl?raw";
+import topographyPostShaderSource from "./shaders/topography-post.wgsl?raw";
+
+const TOPOGRAPHY_CONTROLS = defaultVisualControls.geometry.topography;
+const TOPOGRAPHY_POINTER_CONTROLS = defaultVisualControls.pointer.topography;
+const SEGMENTS = TOPOGRAPHY_CONTROLS.segments;
 const UNIFORM_FLOATS = 36;
 const FLOATS_PER_VERTEX = 10;
-const SAMPLE_COUNT = 4;
-
-const reliefShader = /* wgsl */ `
-struct Scene {
-  viewProjection: mat4x4f,
-  cameraPosition: vec4f,
-  lightDirection: vec4f,
-  viewport: vec4f,
-  params: vec4f,
-  pointer: vec4f,
-}
-
-struct VertexOut {
-  @builtin(position) position: vec4f,
-  @location(0) world: vec3f,
-  @location(1) normal: vec3f,
-  @location(2) material: f32,
-  @location(3) shade: f32,
-  @location(4) focus: f32,
-  @location(5) seed: f32,
-}
-
-@group(0) @binding(0) var<uniform> scene: Scene;
-
-@vertex
-fn vertexMain(
-  @location(0) position: vec3f,
-  @location(1) normal: vec3f,
-  @location(2) material: f32,
-  @location(3) shade: f32,
-  @location(4) focus: f32,
-  @location(5) seed: f32,
-) -> VertexOut {
-  var out: VertexOut;
-  out.world = position;
-  out.normal = normalize(normal);
-  out.material = material;
-  out.shade = shade;
-  out.focus = focus;
-  out.seed = seed;
-  out.position = scene.viewProjection * vec4f(position, 1.0);
-  return out;
-}
-
-fn hash21(point: vec2f) -> f32 {
-  return fract(sin(dot(point, vec2f(127.1, 311.7))) * 43758.5453123);
-}
-
-@fragment
-fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
-  let normal = normalize(input.normal);
-  let view = normalize(scene.cameraPosition.xyz - input.world);
-  let light = normalize(scene.lightDirection.xyz);
-  let halfVector = normalize(light + view);
-  let diffuse = clamp(dot(normal, light), 0.0, 1.0);
-  let softFill = clamp(dot(normal, normalize(vec3f(0.5, 0.3, 0.7))) * 0.5 + 0.5, 0.0, 1.0);
-  let facing = clamp(dot(normal, view), 0.0, 1.0);
-  let side = step(0.5, input.material) * (1.0 - step(1.5, input.material));
-  let floor = step(1.5, input.material);
-  let top = 1.0 - side - floor;
-
-  let heightTone = pow(clamp(input.shade, 0.0, 1.0), 0.7);
-  let topBase = mix(vec3f(0.34, 0.34, 0.32), vec3f(0.82, 0.82, 0.78), heightTone);
-  let sideBase = mix(vec3f(0.006, 0.006, 0.007), vec3f(0.07, 0.07, 0.066), heightTone);
-  let floorBase = vec3f(0.78, 0.78, 0.75);
-  var color = topBase * top + sideBase * side + floorBase * floor;
-
-  let sideOcclusion = side * (0.54 + (1.0 - facing) * 0.24);
-  let shelfOcclusion = top * (1.0 - smoothstep(0.0, 0.28, input.shade)) * 0.2;
-  color = color * (0.2 + diffuse * 0.78 + softFill * 0.1);
-  color = color * (1.0 - sideOcclusion - shelfOcclusion);
-
-  let specPower = mix(52.0, 140.0, top + heightTone * 0.45);
-  let specular = pow(clamp(dot(normal, halfVector), 0.0, 1.0), specPower);
-  let broadSpecular = pow(clamp(dot(reflect(-light, normal), view), 0.0, 1.0), 18.0);
-  let rim = pow(1.0 - facing, 2.2) * (top * 0.18 + side * 0.38);
-  let layerGlint = smoothstep(0.62, 1.0, input.shade) * top;
-  color = color + vec3f(0.98, 0.98, 0.92) * specular * (0.62 + top * 1.24 + side * 1.2);
-  color = color + vec3f(0.72, 0.72, 0.68) * broadSpecular * (top * 0.24 + side * 0.96);
-  color = color + vec3f(0.5, 0.5, 0.48) * rim + vec3f(0.9, 0.9, 0.86) * layerGlint * specular * 0.42;
-
-  let grain = hash21(input.world.xz * 83.0 + vec2f(input.seed, scene.params.x * 0.17));
-  color = color * (0.965 + grain * 0.055);
-
-  let distance = length(scene.cameraPosition.xyz - input.world);
-  let fog = smoothstep(3.25, 5.8, distance);
-  color = mix(color, vec3f(0.82, 0.82, 0.79), fog * 0.66);
-
-  let focusDistance = scene.params.y + input.focus * 0.12;
-  let blur = clamp(smoothstep(0.28, 1.22, abs(distance - focusDistance)) + fog * 0.2 + floor * 0.14, 0.0, 1.0);
-
-  return vec4f(pow(clamp(color * scene.params.z, vec3f(0.0), vec3f(1.0)), vec3f(0.9)), blur);
-}
-`;
-
-const postShader = /* wgsl */ `
-struct Scene {
-  viewProjection: mat4x4f,
-  cameraPosition: vec4f,
-  lightDirection: vec4f,
-  viewport: vec4f,
-  params: vec4f,
-  pointer: vec4f,
-}
-
-struct VertexOut {
-  @builtin(position) position: vec4f,
-  @location(0) uv: vec2f,
-}
-
-@group(0) @binding(0) var postSampler: sampler;
-@group(0) @binding(1) var sceneTexture: texture_2d<f32>;
-@group(0) @binding(2) var<uniform> scene: Scene;
-
-fn hash21(point: vec2f) -> f32 {
-  return fract(sin(dot(point, vec2f(127.1, 311.7))) * 43758.5453123);
-}
-
-@vertex
-fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOut {
-  let positions = array<vec2f, 3>(
-    vec2f(-1.0, -1.0),
-    vec2f(3.0, -1.0),
-    vec2f(-1.0, 3.0),
-  );
-  let position = positions[vertexIndex];
-
-  var out: VertexOut;
-  out.position = vec4f(position, 0.0, 1.0);
-  out.uv = position * 0.5 + vec2f(0.5, 0.5);
-  return out;
-}
-
-fn sampleScene(uv: vec2f, offset: vec2f) -> vec4f {
-  return textureSample(sceneTexture, postSampler, uv + offset);
-}
-
-@fragment
-fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
-  let texel = 1.0 / max(scene.viewport.xy, vec2f(1.0, 1.0));
-  let center = sampleScene(input.uv, vec2f(0.0));
-  let opticalFalloff = smoothstep(0.2, 0.9, length((input.uv - vec2f(0.64, 0.48)) * vec2f(1.16, 1.0)));
-  let foregroundFalloff = smoothstep(0.7, 0.98, input.uv.y) * 0.28;
-  let blur = clamp(center.a * 0.54 + opticalFalloff * 0.22 + foregroundFalloff, 0.0, 1.0);
-  let radius = texel * (0.24 + blur * 6.5);
-
-  var color = center.rgb * 0.52;
-  color = color + sampleScene(input.uv, radius * vec2f(1.0, 0.0)).rgb * 0.07;
-  color = color + sampleScene(input.uv, radius * vec2f(-1.0, 0.0)).rgb * 0.07;
-  color = color + sampleScene(input.uv, radius * vec2f(0.0, 1.0)).rgb * 0.07;
-  color = color + sampleScene(input.uv, radius * vec2f(0.0, -1.0)).rgb * 0.07;
-  color = color + sampleScene(input.uv, radius * vec2f(0.72, 0.72)).rgb * 0.05;
-  color = color + sampleScene(input.uv, radius * vec2f(-0.72, 0.72)).rgb * 0.05;
-  color = color + sampleScene(input.uv, radius * vec2f(0.72, -0.72)).rgb * 0.05;
-  color = color + sampleScene(input.uv, radius * vec2f(-0.72, -0.72)).rgb * 0.05;
-
-  let bloomRadius = radius * 3.2;
-  let bloom =
-    sampleScene(input.uv, bloomRadius * vec2f(1.0, 0.18)).rgb +
-    sampleScene(input.uv, bloomRadius * vec2f(-1.0, -0.18)).rgb +
-    sampleScene(input.uv, bloomRadius * vec2f(0.18, 1.0)).rgb +
-    sampleScene(input.uv, bloomRadius * vec2f(-0.18, -1.0)).rgb;
-  let bloomAmount = smoothstep(0.54, 1.05, max(max(bloom.r, bloom.g), bloom.b) * 0.25);
-  color = color + bloom * bloomAmount * 0.035;
-
-  let leftPaper = smoothstep(0.48, 0.02, input.uv.x) * smoothstep(1.02, 0.18, input.uv.y);
-  color = mix(color, vec3f(0.93, 0.93, 0.9), leftPaper * 0.2);
-  let vignette = smoothstep(1.0, 0.24, length((input.uv - vec2f(0.57, 0.5)) * vec2f(1.02, 0.86)));
-  color = color * mix(0.9, 1.06, vignette);
-
-  let grain = hash21(input.uv * scene.viewport.xy + scene.params.x * 11.0);
-  color = color + vec3f((grain - 0.5) * 0.012);
-
-  return vec4f(clamp(color, vec3f(0.0), vec3f(1.0)), 1.0);
-}
-`;
+const SAMPLE_COUNT = defaultVisualControls.performance.sampleCount.topography;
 
 interface ReliefMesh {
   vertices: Float32Array;
   vertexCount: number;
 }
 
-interface ContourShape {
-  center: Vec2;
-  radius: Vec2;
-  rotation: number;
-  levels: number;
-  height: number;
-  phase: number;
-  roughness: number;
-  focus: number;
-}
+type ContourShape = TopographyShapeControl;
 
 interface PointerState {
   x: number;
@@ -399,11 +221,11 @@ export async function startTopographyRenderer(
 
   const reliefModule = device.createShaderModule({
     label: "topography relief shader",
-    code: reliefShader,
+    code: topographyReliefShaderSource,
   });
   const postModule = device.createShaderModule({
     label: "topography post shader",
-    code: postShader,
+    code: topographyPostShaderSource,
   });
   const reliefPipeline = device.createRenderPipeline({
     label: "topography relief pipeline",
@@ -493,14 +315,14 @@ export async function startTopographyRenderer(
       const rect = canvas.getBoundingClientRect();
       pointer.x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
       pointer.y = (1 - (event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1;
-      pointer.strength = 1;
+      pointer.strength = TOPOGRAPHY_POINTER_CONTROLS.enterStrength;
     },
     { signal: abortController.signal },
   );
   canvas.addEventListener(
     "pointerleave",
     () => {
-      pointer.strength = Math.min(pointer.strength, 0.15);
+      pointer.strength = Math.min(pointer.strength, TOPOGRAPHY_POINTER_CONTROLS.leaveStrengthCap);
     },
     { signal: abortController.signal },
   );
@@ -601,18 +423,20 @@ export async function startTopographyRenderer(
 
     const seconds = time * 0.001;
     const aspect = canvas.width / Math.max(1, canvas.height);
-    const motion = reducedMotion ? 0.15 : 1;
+    const motion = reducedMotion ? TOPOGRAPHY_POINTER_CONTROLS.reducedMotionScale : 1;
     const drift = Math.sin(seconds * 0.12) * 0.02 * motion;
     const eye: Vec3 = [
-      0.02 + pointer.x * pointer.strength * 0.035,
-      1.05 + pointer.y * pointer.strength * 0.018,
+      0.02 + pointer.x * pointer.strength * TOPOGRAPHY_POINTER_CONTROLS.eyeXInfluence,
+      1.05 + pointer.y * pointer.strength * TOPOGRAPHY_POINTER_CONTROLS.eyeYInfluence,
       3.3,
     ];
     const target: Vec3 = [1.08 + drift, 0.22, -0.42];
     const projection = perspective((35 * Math.PI) / 180, aspect, 0.08, 7.2);
     const view = lookAt(eye, target, [0, 1, 0]);
     const viewProjection = multiplyMat4(projection, view);
-    pointer.strength *= reducedMotion ? 0.92 : 0.97;
+    pointer.strength *= reducedMotion
+      ? TOPOGRAPHY_POINTER_CONTROLS.reducedMotionIdleDecay
+      : TOPOGRAPHY_POINTER_CONTROLS.idleDecay;
 
     uniforms.set(viewProjection, 0);
     uniforms.set([eye[0], eye[1], eye[2], 1], 16);
@@ -715,88 +539,7 @@ function createReliefMesh(): ReliefMesh {
   return builder.mesh();
 }
 
-const shapes: ContourShape[] = [
-  {
-    center: [0.98, -0.16],
-    radius: [0.92, 0.6],
-    rotation: -0.16,
-    levels: 25,
-    height: 0.66,
-    phase: 1.2,
-    roughness: 0.18,
-    focus: 0.05,
-  },
-  {
-    center: [1.66, 0.12],
-    radius: [0.82, 0.52],
-    rotation: 0.24,
-    levels: 19,
-    height: 0.48,
-    phase: 2.6,
-    roughness: 0.16,
-    focus: -0.04,
-  },
-  {
-    center: [0.18, 0.28],
-    radius: [0.68, 0.44],
-    rotation: 0.18,
-    levels: 15,
-    height: 0.34,
-    phase: 4.7,
-    roughness: 0.17,
-    focus: 0.15,
-  },
-  {
-    center: [1.22, -1.18],
-    radius: [1.18, 0.46],
-    rotation: -0.03,
-    levels: 16,
-    height: 0.34,
-    phase: 5.4,
-    roughness: 0.09,
-    focus: 0.6,
-  },
-  {
-    center: [0.4, -1.42],
-    radius: [0.86, 0.34],
-    rotation: -0.08,
-    levels: 12,
-    height: 0.26,
-    phase: 6.35,
-    roughness: 0.16,
-    focus: 0.72,
-  },
-  {
-    center: [2.18, -0.34],
-    radius: [1.08, 0.4],
-    rotation: 0.08,
-    levels: 13,
-    height: 0.3,
-    phase: 7.2,
-    roughness: 0.17,
-    focus: 0.3,
-  },
-  {
-    center: [-1.22, 1.05],
-    radius: [1.12, 0.52],
-    rotation: -0.08,
-    levels: 13,
-    height: 0.3,
-    phase: 8.3,
-    roughness: 0.16,
-    focus: -0.72,
-  },
-  {
-    center: [0.18, -1.78],
-    radius: [0.92, 0.38],
-    rotation: 0.06,
-    levels: 11,
-    height: 0.25,
-    phase: 9.8,
-    roughness: 0.1,
-    focus: 0.82,
-  },
-];
+const shapes = TOPOGRAPHY_CONTROLS.shapes;
 
 function createLoop(shape: ContourShape, fraction: number): LoopPoint[] {
   const points: LoopPoint[] = [];
@@ -860,7 +603,10 @@ function loopCenter(loop: LoopPoint[], y: number): Vec3 {
 }
 
 function resizeCanvas(canvas: HTMLCanvasElement): boolean {
-  const pixelRatio = Math.min(window.devicePixelRatio || 1, 2.5);
+  const pixelRatio = Math.min(
+    window.devicePixelRatio || 1,
+    defaultVisualControls.performance.maxPixelRatio.topography,
+  );
   const width = Math.max(1, Math.floor(canvas.clientWidth * pixelRatio));
   const height = Math.max(1, Math.floor(canvas.clientHeight * pixelRatio));
 
@@ -873,7 +619,7 @@ function resizeCanvas(canvas: HTMLCanvasElement): boolean {
   return true;
 }
 
-type Vec2 = [number, number];
+type Vec2 = readonly [number, number];
 type Vec3 = [number, number, number];
 
 function perspective(fovy: number, aspect: number, near: number, far: number): Float32Array {
