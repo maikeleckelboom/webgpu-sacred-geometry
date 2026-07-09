@@ -27,7 +27,8 @@ body {
 }
 
 body.flow-page-body,
-body.aurora-page-body {
+body.aurora-page-body,
+body.living-glass-page-body {
   color-scheme: dark;
   background: #020305;
 }
@@ -40,7 +41,8 @@ body.waves-page-body {
 }
 
 body.flow-page-body .lab-header,
-body.aurora-page-body .lab-header {
+body.aurora-page-body .lab-header,
+body.living-glass-page-body .lab-header {
   --lab-surface: rgba(4, 7, 10, 0.74);
   --lab-text: #f5fff6;
   --lab-muted: rgba(218, 241, 230, 0.68);
@@ -195,7 +197,8 @@ body.aurora-page-body .lab-header {
 }
 
 .study-page--flow,
-.study-page--aurora {
+.study-page--aurora,
+.study-page--living-glass {
   --study-bg: #020305;
   --study-text: #f5fff6;
   --study-status-bg: rgba(2, 5, 8, 0.92);
@@ -211,7 +214,8 @@ body.aurora-page-body .lab-header {
 }
 
 .flow-canvas,
-.aurora-canvas {
+.aurora-canvas,
+.living-glass-canvas {
   background: #020305;
 }
 
@@ -225,6 +229,48 @@ body.aurora-page-body .lab-header {
 
 .waves-canvas {
   background: #f8f7f2;
+}
+
+.living-glass-quality {
+  position: fixed;
+  right: 1.2rem;
+  bottom: 1.2rem;
+  z-index: 4;
+  display: grid;
+  max-width: min(22rem, calc(100vw - 2.4rem));
+  align-items: center;
+  gap: 0.46rem 0.72rem;
+  grid-template-columns: auto minmax(8rem, 10rem);
+  padding: 0.84rem 0.96rem;
+  border: 1px solid rgba(180, 226, 255, 0.18);
+  border-radius: 8px;
+  color: #e4f2ff;
+  background: rgba(4, 10, 18, 0.78);
+  box-shadow: 0 1rem 2.4rem rgba(0, 0, 0, 0.24);
+}
+
+.living-glass-quality label {
+  color: rgba(228, 242, 255, 0.72);
+  font-size: 0.78rem;
+  font-weight: 720;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.living-glass-quality select {
+  min-width: 8rem;
+  padding: 0.44rem 0.52rem;
+  border: 1px solid rgba(228, 242, 255, 0.18);
+  border-radius: 6px;
+  color: #e4f2ff;
+  background: rgba(2, 6, 12, 0.86);
+  font: inherit;
+}
+
+.living-glass-quality span {
+  grid-column: 1 / -1;
+  color: rgba(228, 242, 255, 0.62);
+  font-size: 0.78rem;
 }
 
 .is-canvas-entering .study-canvas-layer {
@@ -270,6 +316,18 @@ body.aurora-page-body .lab-header {
     --lab-header-space: 5.6rem;
 
     min-height: max(100svh, 43rem);
+  }
+
+  .living-glass-quality {
+    right: 1rem;
+    bottom: 1rem;
+    left: 1rem;
+    max-width: none;
+    grid-template-columns: 1fr;
+  }
+
+  .living-glass-quality select {
+    width: 100%;
   }
 }
 

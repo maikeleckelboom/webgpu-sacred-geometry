@@ -2,6 +2,7 @@ import "./style.css";
 import { mountArchitecturePage } from "./architecturePage";
 import { mountAuroraPage } from "./auroraPage";
 import { mountFlowFieldPage } from "./flowPage";
+import { mountLivingGlassPage } from "./livingGlassPage";
 import { createLabHeader, setLabHeaderActive, type LabRoute } from "./navigation";
 import { mountTopographyPage } from "./topographyPage";
 import { mountWavesPage } from "./wavesPage";
@@ -27,6 +28,7 @@ const pageRoutes: Record<string, PageRoute> = {
   "/topography": { mount: mountTopographyPage, route: "topography" },
   "/architecture": { mount: mountArchitecturePage, route: "architecture" },
   "/waves": { mount: mountWavesPage, route: "waves" },
+  "/living-glass": { mount: mountLivingGlassPage, route: "living-glass" },
 };
 
 const initialPageRoute = getPageRoute(normalizePathname(window.location.pathname));

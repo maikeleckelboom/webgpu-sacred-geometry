@@ -4,6 +4,7 @@ const pageBodyClasses = [
   "topography-page-body",
   "architecture-page-body",
   "waves-page-body",
+  "living-glass-page-body",
 ];
 
 export function setPageBodyClass(activeClass: string): void {
