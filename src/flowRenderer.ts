@@ -14,12 +14,12 @@ const BLOOM_EXPOSURE = 0.9;
 const BLOOM_SHADING = 0.5;
 const BLOOM_GAMMA = 1.0 / 2.4;
 
-const PRESSURE_CHARGE_RATE = 0.85;
+const PRESSURE_CHARGE_RATE = 2.15;
 const PRESSURE_RELEASE_RATE = 3.0;
 const PRESSURE_SWIRL_BOOST = 1.6;
 const PRESSURE_BLOOM_BOOST = 2.8;
 const PRESSURE_LIGHT_BOOST = 2.4;
-const PRESSURE_EXPOSURE_BOOST = 0.28;
+const PRESSURE_EXPOSURE_BOOST = 0.22;
 
 const VELOCITY_GAIN = 1.35;
 
@@ -413,12 +413,14 @@ fn lineVertex(
   let toPointer = particle.position - render.pointer;
   let pointerDistance = length(vec2f(toPointer.x * render.aspect, toPointer.y));
   let wakeRadius = 0.5 + render.pressure * 0.4;
-  let pointerWake = (1.0 - smoothstep(0.035, wakeRadius, pointerDistance)) * render.pointerStrength * (1.0 + render.pressure * 1.8);
-  let trail = 0.022 + speed * 0.20 + particle.depth * 0.025 + pointerWake * 0.08;
+  let pointerWake = (1.0 - smoothstep(0.035, wakeRadius, pointerDistance)) * render.pointerStrength * (1.0 + render.pressure * 0.65);
+  let vectorEnergy = clamp(speed * 2.0 + abs(particle.mCurl) * 4.5 + particle.mEnergy * 0.55, 0.0, 1.0);
+  let vectorCharge = smoothstep(0.18, 0.92, vectorEnergy) * render.pressure * render.pointerStrength;
+  let trail = 0.022 + speed * 0.20 + particle.depth * 0.025 + pointerWake * 0.055 + vectorCharge * 0.105;
   let head = particle.position;
   let tail = head - direction * trail;
   let center = mix(tail, head, corner.x);
-  let widthPixels = 0.5 + speed * 6.0 + abs(particle.mCurl) * 80.0 + pointerWake * 1.6;
+  let widthPixels = 0.5 + speed * 6.0 + abs(particle.mCurl) * 80.0 + pointerWake * 1.05 + vectorCharge * 2.05;
   let position = center + normal * corner.y * widthPixels;
   let mask = sceneMask(particle.position);
   let glintSeed = step(0.978, hash11(particle.seed * 23.71));
@@ -430,10 +432,10 @@ fn lineVertex(
   out.position = vec4f(position, 0.0, 1.0);
   out.local = corner;
   out.color = fieldColor(particle, render.time);
-  out.color = out.color * (1.0 + pointerWake * 2.2);
+  out.color = out.color * (1.0 + pointerWake * 1.2 + vectorCharge * 2.35);
   out.color = out.color + vec3f(1.0, 0.94, 0.74) * glintShimmer * 2.3;
   let baseAlpha = 0.045 + abs(particle.mCurl) * 4.5 + speed * 0.7 + particle.mEnergy * 0.4;
-  out.alpha = render.opacity * mask * lifeFade(particle) * headShimmer * (baseAlpha + glintShimmer * 0.25 + pointerWake * 0.18);
+  out.alpha = render.opacity * mask * lifeFade(particle) * headShimmer * (baseAlpha + glintShimmer * 0.25 + pointerWake * 0.12 + vectorCharge * 0.18);
   return out;
 }
 
@@ -468,7 +470,9 @@ fn spriteVertex(
   let toPointer = particle.position - render.pointer;
   let pointerDistance = length(vec2f(toPointer.x * render.aspect, toPointer.y));
   let wakeRadius = 0.43 + render.pressure * 0.4;
-  let pointerWake = (1.0 - smoothstep(0.02, wakeRadius, pointerDistance)) * render.pointerStrength * (1.0 + render.pressure * 1.8);
+  let pointerWake = (1.0 - smoothstep(0.02, wakeRadius, pointerDistance)) * render.pointerStrength * (1.0 + render.pressure * 0.65);
+  let vectorEnergy = clamp(particle.mSpeed * 2.0 + abs(particle.mCurl) * 4.5 + particle.mEnergy * 0.55, 0.0, 1.0);
+  let vectorCharge = smoothstep(0.18, 0.92, vectorEnergy) * render.pressure * render.pointerStrength;
   let glintSlow = 0.25 + 0.75 * smoothstep(0.0, 1.0, sin(render.time * 0.5 + particle.seed * 0.16) * 0.5 + 0.5);
   let glintShimmer = glint * (0.4 + 0.6 * sin(render.time * 4.6 + particle.seed * 3.1 + particle.position.x * 2.4)) * glintSlow;
   let nodeSlow = 0.3 + 0.7 * smoothstep(0.0, 1.0, sin(render.time * 0.42 + particle.seed * 0.19) * 0.5 + 0.5);
@@ -476,7 +480,7 @@ fn spriteVertex(
   let pulse = 0.9 + sin(render.time * 1.8 + particle.seed * 0.031) * 0.1;
   let shimmerPulse = pulse * (0.85 + 0.15 * smoothstep(0.0, 1.0, sin(render.time * 0.65 + particle.seed * 0.11) * 0.5 + 0.5));
   let curlBright = abs(particle.mCurl) * 90.0;
-  let radiusPixels = (0.65 + marker * (2.8 + particle.mSpeed * 3.0 + curlBright) + node * 1.4 + glint * 5.4 + pointerWake * 3.6) * shimmerPulse;
+  let radiusPixels = (0.65 + marker * (2.8 + particle.mSpeed * 3.0 + curlBright) + node * 1.4 + glint * 5.4 + pointerWake * 2.1 + vectorCharge * 3.2) * shimmerPulse;
   let position = particle.position + corner * ndcPixel * radiusPixels;
   let mask = sceneMask(particle.position);
 
@@ -484,9 +488,9 @@ fn spriteVertex(
   out.position = vec4f(position, 0.0, 1.0);
   out.local = corner;
   out.color = fieldColor(particle, render.time);
-  out.color = out.color * (1.0 + pointerWake * 2.2);
+  out.color = out.color * (1.0 + pointerWake * 1.2 + vectorCharge * 2.35);
   out.color = out.color + vec3f(1.0, 0.94, 0.74) * max(glintShimmer * 0.6, nodeTwinkle * 0.34) * 2.3;
-  out.alpha = render.opacity * mask * lifeFade(particle) * (marker * (0.12 + particle.mSpeed * 0.4 + curlBright * 0.4) + nodeTwinkle * 0.12 + glintShimmer * 0.42 + pointerWake * 0.24);
+  out.alpha = render.opacity * mask * lifeFade(particle) * (marker * (0.12 + particle.mSpeed * 0.4 + curlBright * 0.4) + nodeTwinkle * 0.12 + glintShimmer * 0.42 + pointerWake * 0.14 + vectorCharge * 0.22);
   return out;
 }
 
@@ -701,7 +705,11 @@ fn skyColor(uv: vec2f, time: f32) -> vec3f {
   // Star layers: two densities for variety. Each star gets its own random
   // frequency, two twinkle octaves, a rare flare, a random hue, and its
   // own brightness so the sky never beats in a pattern.
-  let starGrid = floor(uv * vec2f(280.0, 160.0));
+  let starDomain = uv * vec2f(280.0, 160.0);
+  let starGrid = floor(starDomain);
+  let starLocal = fract(starDomain) - vec2f(0.5);
+  let starShape = exp(-dot(starLocal, starLocal) * 92.0);
+  let brightStarShape = exp(-dot(starLocal, starLocal) * 48.0);
   let cellRand = hash21(starGrid);
   let phase = hash21(starGrid + vec2f(7.3, 2.1)) * 6.2831;
   let freqSlow = 0.35 + hash21(starGrid + vec2f(3.7, 9.2)) * 1.45;
@@ -720,8 +728,8 @@ fn skyColor(uv: vec2f, time: f32) -> vec3f {
   let starColor = mix(vec3f(0.58, 0.88, 0.78), vec3f(1.0, 0.95, 0.82), hueShift);
   let brightStarColor = mix(vec3f(0.7, 0.95, 1.0), vec3f(1.0, 0.92, 0.7), hash21(starGrid + vec2f(9.9, 0.3)));
 
-  color += starColor * star * clamp(twinkle, 0.0, 1.4) * brightness * 0.18 * smoothstep(0.25, 0.98, uv.y);
-  color += brightStarColor * brightStar * clamp(twinkle * 1.2, 0.0, 1.6) * 0.42 * smoothstep(0.2, 0.98, uv.y);
+  color += starColor * star * starShape * clamp(twinkle, 0.0, 1.4) * brightness * 0.34 * smoothstep(0.25, 0.98, uv.y);
+  color += brightStarColor * brightStar * brightStarShape * clamp(twinkle * 1.2, 0.0, 1.6) * 0.56 * smoothstep(0.2, 0.98, uv.y);
 
   return color;
 }
@@ -754,6 +762,51 @@ fn fakeShading(uv: vec2f, base: vec3f) -> vec3f {
   return mix(base, base * diffuse, render.shadingStrength);
 }
 
+fn accumulationEnergy(uv: vec2f) -> f32 {
+  let inBounds = step(0.0, uv.x) * step(0.0, uv.y) * step(uv.x, 1.0) * step(uv.y, 1.0);
+  let color = textureSample(historyTexture, postSampler, clamp(uv, vec2f(0.0), vec2f(1.0))).rgb;
+  return length(color) * inBounds;
+}
+
+fn localAccumulationHalo(uv: vec2f) -> f32 {
+  let px = 1.0 / max(render.viewport, vec2f(1.0, 1.0));
+  let nearX = vec2f(px.x * 3.0, 0.0);
+  let nearY = vec2f(0.0, px.y * 3.0);
+  let nearD = vec2f(px.x * 2.2, px.y * 2.2);
+  let farX = vec2f(px.x * 7.0, 0.0);
+  let farY = vec2f(0.0, px.y * 7.0);
+  let farD = vec2f(px.x * 5.0, px.y * 5.0);
+
+  let center = accumulationEnergy(uv);
+  let near = (
+    accumulationEnergy(uv + nearX) +
+    accumulationEnergy(uv - nearX) +
+    accumulationEnergy(uv + nearY) +
+    accumulationEnergy(uv - nearY) +
+    accumulationEnergy(uv + nearD) +
+    accumulationEnergy(uv - nearD) +
+    accumulationEnergy(uv + vec2f(nearD.x, -nearD.y)) +
+    accumulationEnergy(uv + vec2f(-nearD.x, nearD.y))
+  ) * 0.125;
+  let far = (
+    accumulationEnergy(uv + farX) +
+    accumulationEnergy(uv - farX) +
+    accumulationEnergy(uv + farY) +
+    accumulationEnergy(uv - farY) +
+    accumulationEnergy(uv + farD) +
+    accumulationEnergy(uv - farD) +
+    accumulationEnergy(uv + vec2f(farD.x, -farD.y)) +
+    accumulationEnergy(uv + vec2f(-farD.x, farD.y))
+  ) * 0.125;
+  let detail = abs(accumulationEnergy(uv + nearX) - accumulationEnergy(uv - nearX)) +
+    abs(accumulationEnergy(uv + nearY) - accumulationEnergy(uv - nearY)) +
+    abs(accumulationEnergy(uv + nearD) - accumulationEnergy(uv - nearD)) * 0.7;
+  let denseCore = smoothstep(0.9, 1.8, center);
+  let vectorMask = max(max(center * 0.52, near * 0.92 + far * 0.42), detail * 0.95);
+
+  return smoothstep(0.045, 0.58, vectorMask) * (1.0 - denseCore * 0.28);
+}
+
 @fragment
 fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
   let dye = textureSample(historyTexture, postSampler, input.uv).rgb;
@@ -772,30 +825,21 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
   let causticColor = vec3f(0.45, 0.95, 0.78) * r1 * 0.42 + vec3f(0.32, 0.78, 1.0) * r2 * 0.3;
   let caustic = causticColor * causticMask * causticCore;
 
-  let pointerNdc = input.uv * 2.0 - vec2f(1.0, 1.0);
-  let pointerOffset = pointerNdc - render.pointer;
-  let pointerDistance = length(vec2f(pointerOffset.x * render.aspect, pointerOffset.y));
-  let haloFalloff = 7.5 - pressure * 3.2;
-  let coreFalloff = 55.0 - pressure * 22.0;
-  let pointerHalo = exp(-pointerDistance * pointerDistance * haloFalloff);
-  let pointerCore = exp(-pointerDistance * pointerDistance * coreFalloff);
-  let pointerLight = (pointerHalo * 0.78 + pointerCore * 0.22) * render.pointerStrength * (1.0 + pressure * ${PRESSURE_LIGHT_BOOST.toFixed(2)});
-  let causticLit = caustic * (1.0 + pointerLight * 1.4);
-  let bloomLit = bloom * (1.0 + pointerLight * 1.1);
+  let particleHalo = localAccumulationHalo(input.uv);
+  let particleCore = smoothstep(0.12, 0.72, dyeMag);
+  let particleLight = (particleHalo * 0.78 + particleCore * 0.22) * render.pointerStrength * (1.0 + pressure * ${PRESSURE_LIGHT_BOOST.toFixed(2)});
+  let causticLit = caustic * (1.0 + particleLight * 1.4);
+  let bloomLit = bloom * (1.0 + particleLight * 1.1);
 
-  let ringRadius = 0.06 + pressure * 0.34;
-  let ringWidth = 0.012 + pressure * 0.04;
-  let ringDelta = pointerDistance - ringRadius;
-  let ringFalloff = exp(-(ringDelta * ringDelta) / (ringWidth * ringWidth));
   let ringShimmer = 0.7 + 0.3 * sin(render.time * 6.0 + pressure * 12.0);
   let ringColor = mix(vec3f(0.55, 0.95, 1.0), vec3f(1.0, 0.86, 0.62), pressure);
-  let chargeRing = ringFalloff * ringShimmer * pressure * render.pointerStrength * ringColor * 1.8;
+  let chargeGlow = particleHalo * ringShimmer * pressure * render.pointerStrength * ringColor * 1.15;
 
-  let pressureHalo = exp(-pointerDistance * pointerDistance * (3.0 - pressure * 1.6)) * pressure * 0.5;
+  let pressureHalo = particleHalo * pressure * 0.65;
   let pressureGlow = pressureHalo * vec3f(0.42, 0.78, 1.0) * render.pointerStrength;
 
   let bloomPulse = 0.86 + 0.14 * smoothstep(0.0, 1.0, sin(render.time * 0.6) * 0.5 + 0.5);
-  var color = skyColor(input.uv, render.time) + base + bloomLit * vec3f(0.72, 1.02, 0.86) * bloomPulse + causticLit + chargeRing + pressureGlow;
+  var color = skyColor(input.uv, render.time) + base + bloomLit * vec3f(0.72, 1.02, 0.86) * bloomPulse + causticLit + chargeGlow + pressureGlow;
 
   let noise = (hash21(input.uv * render.viewport + vec2f(render.time * 17.0, 0.0)) - 0.5) / 255.0;
   color += noise;
