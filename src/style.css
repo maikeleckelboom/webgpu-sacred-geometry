@@ -27,6 +27,7 @@ body {
 }
 
 body.flow-page-body,
+body.hero-flow-page-body,
 body.aurora-page-body,
 body.living-glass-page-body {
   color-scheme: dark;
@@ -41,6 +42,7 @@ body.waves-page-body {
 }
 
 body.flow-page-body .lab-header,
+body.hero-flow-page-body .lab-header,
 body.aurora-page-body .lab-header,
 body.living-glass-page-body .lab-header {
   --lab-surface: rgba(4, 7, 10, 0.74);
@@ -61,6 +63,19 @@ body.flow-page-body.flow-page-body--light .lab-header {
   --lab-muted: rgba(6, 52, 58, 0.62);
   --lab-border: rgba(15, 77, 82, 0.14);
   --lab-active: #0b6872;
+}
+
+body.hero-flow-page-body.hero-flow-page-body--light {
+  color-scheme: light;
+  background: #f1f3f6;
+}
+
+body.hero-flow-page-body.hero-flow-page-body--light .lab-header {
+  --lab-surface: rgba(241, 243, 246, 0.88);
+  --lab-text: #16202c;
+  --lab-muted: rgba(22, 32, 44, 0.6);
+  --lab-border: rgba(22, 32, 44, 0.12);
+  --lab-active: #10513b;
 }
 
 #app {
@@ -225,6 +240,26 @@ body.flow-page-body.flow-page-body--light .lab-header {
   --study-status-border: rgba(15, 77, 82, 0.18);
 }
 
+.study-page--hero-flow {
+  --study-bg: #020305;
+  --study-text: #f5fff6;
+  --study-status-bg: rgba(2, 5, 8, 0.92);
+  --study-status-border: rgba(120, 255, 196, 0.32);
+  --hero-kicker: #7dffc0;
+  --hero-muted: rgba(230, 244, 238, 0.72);
+  --hero-secondary-border: rgba(245, 255, 246, 0.4);
+}
+
+.study-page--hero-flow.is-flow-light {
+  --study-bg: #f1f3f6;
+  --study-text: #16202c;
+  --study-status-bg: rgba(248, 250, 252, 0.92);
+  --study-status-border: rgba(22, 32, 44, 0.16);
+  --hero-kicker: #10745a;
+  --hero-muted: #5c6a79;
+  --hero-secondary-border: rgba(22, 32, 44, 0.3);
+}
+
 .study-page--architecture {
   --study-bg: #f2f2ee;
 }
@@ -253,6 +288,94 @@ body.flow-page-body.flow-page-body--light .lab-header {
 
 .study-page--flow.is-flow-light .flow-canvas {
   background: #eef3ef;
+}
+
+.hero-flow-canvas {
+  background: #020305;
+}
+
+.study-page--hero-flow.is-flow-light .hero-flow-canvas {
+  background: #f1f3f6;
+}
+
+/* The hero-flow prototype shows the actual hero copy on top of the canvas. */
+.study-page--hero-flow .study-hero {
+  position: relative;
+  z-index: 2;
+  display: block;
+  align-self: center;
+  justify-self: start;
+  max-width: min(46rem, 94vw);
+  padding: 0 clamp(1.3rem, 6vw, 4.6rem);
+  pointer-events: none;
+}
+
+.study-page--hero-flow .study-kicker {
+  margin: 0;
+  color: var(--hero-kicker);
+  font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
+  font-size: 0.76rem;
+  font-weight: 640;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+}
+
+.study-page--hero-flow .study-hero h1 {
+  margin: 1rem 0 1.3rem;
+  font-size: clamp(2.7rem, 5.4vw, 4.7rem);
+  font-weight: 320;
+  letter-spacing: -0.018em;
+  line-height: 1.05;
+  text-wrap: balance;
+}
+
+.study-page--hero-flow .study-subtitle {
+  margin: 0;
+  max-width: 34.5rem;
+  color: var(--hero-muted);
+  font-size: clamp(1rem, 1.4vw, 1.17rem);
+  line-height: 1.62;
+}
+
+.study-page--hero-flow .study-actions {
+  display: flex;
+  align-items: center;
+  gap: clamp(1.3rem, 2.6vw, 2.1rem);
+  margin-top: 2.3rem;
+  pointer-events: auto;
+}
+
+.study-page--hero-flow .study-action--primary {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.95rem 1.7rem;
+  border-radius: 5px;
+  background: #123f2c;
+  color: #fff;
+  font-weight: 640;
+  box-shadow: 0 0.9rem 1.9rem rgba(12, 46, 32, 0.22);
+  transition: background 160ms ease, transform 160ms ease;
+}
+
+.study-page--hero-flow .study-action--primary:hover,
+.study-page--hero-flow .study-action--primary:focus-visible {
+  background: #175139;
+  transform: translateY(-1px);
+}
+
+.study-page--hero-flow .study-action--secondary {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.1rem 0.6rem;
+  border-bottom: 1px solid var(--hero-secondary-border);
+  color: var(--study-text);
+  font-weight: 640;
+  transition: border-color 160ms ease;
+}
+
+.study-page--hero-flow .study-action--secondary:hover,
+.study-page--hero-flow .study-action--secondary:focus-visible {
+  border-color: currentColor;
 }
 
 .flow-theme-toggle {
