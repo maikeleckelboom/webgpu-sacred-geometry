@@ -1,12 +1,11 @@
 const pageBodyClasses = [
   "flow-page-body",
   "flow-page-body--light",
+  "flow-sheet-page-body",
   "hero-flow-page-body",
   "hero-flow-page-body--light",
   "aurora-page-body",
   "topography-page-body",
-  "architecture-page-body",
-  "waves-page-body",
   "living-glass-page-body",
 ];
 

@@ -16,7 +16,7 @@ export function mountTopographyPage(root: HTMLDivElement): PageHandle {
     description:
       "A grayscale volume study built from generated contour meshes, shallow fog, and a post-process focus pass.",
     actions: [
-      { href: "/architecture", label: "Open architecture", variant: "primary" },
+      { href: "/flow-sheet", label: "Open flow sheet", variant: "primary" },
       { href: "/flow-field", label: "View flow field", variant: "secondary" },
     ],
   });

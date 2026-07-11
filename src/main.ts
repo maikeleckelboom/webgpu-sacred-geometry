@@ -1,12 +1,11 @@
 import "./style.css";
-import { mountArchitecturePage } from "./architecturePage";
 import { mountAuroraPage } from "./auroraPage";
 import { mountFlowFieldPage } from "./flowPage";
+import { mountFlowSheetPage } from "./flowSheetPage";
 import { mountHeroFlowPage } from "./heroFlowPage";
 import { mountLivingGlassPage } from "./livingGlassPage";
 import { createLabHeader, setLabHeaderActive, type LabRoute } from "./navigation";
 import { mountTopographyPage } from "./topographyPage";
-import { mountWavesPage } from "./wavesPage";
 import type { PageHandle } from "./studyFrame";
 
 interface PageRoute {
@@ -25,11 +24,10 @@ const appRoot = app;
 const pageRoutes: Record<string, PageRoute> = {
   "/": { mount: mountFlowFieldPage, route: "flow-field" },
   "/flow-field": { mount: mountFlowFieldPage, route: "flow-field" },
+  "/flow-sheet": { mount: mountFlowSheetPage, route: "flow-sheet" },
   "/hero-flow": { mount: mountHeroFlowPage, route: "hero-flow" },
   "/aurora": { mount: mountAuroraPage, route: "aurora" },
   "/topography": { mount: mountTopographyPage, route: "topography" },
-  "/architecture": { mount: mountArchitecturePage, route: "architecture" },
-  "/waves": { mount: mountWavesPage, route: "waves" },
   "/living-glass": { mount: mountLivingGlassPage, route: "living-glass" },
 };
 

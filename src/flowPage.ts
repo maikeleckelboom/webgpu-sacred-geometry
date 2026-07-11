@@ -21,7 +21,7 @@ export function mountFlowFieldPage(root: HTMLDivElement): PageHandle {
       "A luminous field of routed particles, drifting curtains, and reactive wake lines moving through soft attractors.",
     actions: [
       { href: "/topography", label: "Open topography", variant: "primary" },
-      { href: "/architecture", label: "View architecture", variant: "secondary" },
+      { href: "/flow-sheet", label: "View flow sheet", variant: "secondary" },
     ],
   });
 

@@ -9,8 +9,8 @@ const PARTICLE_COUNT = 30000;
 const WORKGROUP_SIZE = 64;
 const FLOATS_PER_PARTICLE = 12;
 const UNIFORM_FLOATS = 24;
-const TRAIL_DECAY = 0.885;
-const INK_STRENGTH = 0.7;
+const TRAIL_DECAY = 0.93;
+const INK_STRENGTH = 0.78;
 const REDUCED_MOTION_SCALE = defaultVisualControls.flow.reducedMotionScale;
 
 const PRESSURE_CHARGE_RATE = FLOW_POINTER_CONTROLS.pressureChargeRate;
@@ -114,14 +114,6 @@ export async function startInkFlowRenderer(canvas: HTMLCanvasElement): Promise<I
     "lineFragment",
     "ink line pipeline",
   );
-  const spritePipeline = createParticlePipeline(
-    device,
-    renderModule,
-    offscreenFormat,
-    "spriteVertex",
-    "spriteFragment",
-    "ink sprite pipeline",
-  );
   const accumPipeline = device.createRenderPipeline({
     label: "ink accumulation pipeline",
     layout: "auto",
@@ -162,10 +154,6 @@ export async function startInkFlowRenderer(canvas: HTMLCanvasElement): Promise<I
   const lineBindGroups = [
     createRenderBindGroup(device, linePipeline, particleBuffers[0], renderBuffer),
     createRenderBindGroup(device, linePipeline, particleBuffers[1], renderBuffer),
-  ];
-  const spriteBindGroups = [
-    createRenderBindGroup(device, spritePipeline, particleBuffers[0], renderBuffer),
-    createRenderBindGroup(device, spritePipeline, particleBuffers[1], renderBuffer),
   ];
   const setupError = await device.popErrorScope();
 
@@ -479,9 +467,6 @@ export async function startInkFlowRenderer(canvas: HTMLCanvasElement): Promise<I
     });
     scenePass.setPipeline(linePipeline);
     scenePass.setBindGroup(0, lineBindGroups[targetIndex]);
-    scenePass.draw(6, PARTICLE_COUNT);
-    scenePass.setPipeline(spritePipeline);
-    scenePass.setBindGroup(0, spriteBindGroups[targetIndex]);
     scenePass.draw(6, PARTICLE_COUNT);
     scenePass.end();
 

@@ -50,6 +50,12 @@ fn lifeFade(particle: Particle) -> f32 {
   return clamp(birth * death, 0.0, 1.0);
 }
 
+// Mirrors the compute shader's wandering ring center.
+fn ringCenterAt(aspect: f32, time: f32) -> vec2f {
+  let drift = vec2f(sin(time * 0.047) * 0.07, cos(time * 0.036) * 0.055);
+  return vec2f(aspect * RING_CENTER_X, RING_CENTER_Y) + drift;
+}
+
 // Fades strokes at the frame edges, inside the glowing ring, and over the
 // hero text block on the left so the copy keeps clean paper behind it.
 fn inkMask(position: vec2f) -> f32 {
@@ -57,7 +63,7 @@ fn inkMask(position: vec2f) -> f32 {
   let vertical = 1.0 - smoothstep(1.02, 1.24, abs(position.y));
 
   let q = vec2f(position.x * render.aspect, position.y);
-  let c = vec2f(render.aspect * RING_CENTER_X, RING_CENTER_Y);
+  let c = ringCenterAt(render.aspect, render.time);
   let r = length(q - c);
   let interior = 1.0 - smoothstep(RING_RADIUS * 0.55, RING_RADIUS * 1.0, r);
 
@@ -72,17 +78,14 @@ fn inkMask(position: vec2f) -> f32 {
   return horizontal * vertical * leftFade * (1.0 - interior * 0.93) * (1.0 - textShield * 0.85);
 }
 
-// Per-channel absorption coefficients: the post pass composes strokes as
-// paper * exp(-accumulated * strength), so red-heavy absorption reads as
-// navy ink on paper.
+// Near-neutral absorption keeps the field graphite-like. Particle variation
+// changes only ink density, not hue, so the flow remains richly layered
+// without breaking the monochrome paper treatment.
 fn inkAbsorption(particle: Particle) -> vec3f {
   let h = hash11(particle.seed * 9.71);
-  let slate = vec3f(1.05, 0.95, 0.75);
-  let navy = vec3f(1.9, 1.45, 0.7);
-  let blue = vec3f(2.4, 1.5, 0.35);
-  var absorb = mix(slate, navy, smoothstep(0.1, 0.8, h));
-  absorb = mix(absorb, blue, step(0.965, h));
-  return absorb;
+  let curlDensity = clamp(abs(particle.mCurl) * 0.45, 0.0, 0.22);
+  let density = 1.32 + h * 0.34 + curlDensity;
+  return vec3f(density);
 }
 
 @vertex
@@ -112,11 +115,11 @@ fn lineVertex(
   let wakeRadius = 0.45 + render.pressure * 0.35;
   let pointerWake = (1.0 - smoothstep(0.03, wakeRadius, pointerDistance)) * render.pointerStrength * (1.0 + render.pressure * 0.6);
 
-  let trail = 0.010 + speed * 0.05 + particle.depth * 0.008 + pointerWake * 0.03;
+  let trail = 0.011 + speed * 0.055 + particle.depth * 0.008 + pointerWake * 0.03;
   let head = particle.position;
   let tail = head - direction * trail;
   let center = mix(tail, head, corner.x);
-  let widthPixels = 0.35 + particle.depth * 0.45 + min(abs(particle.mCurl), 1.0) * 0.6 + pointerWake * 0.5;
+  let widthPixels = 0.28 + particle.depth * 0.32 + min(abs(particle.mCurl), 1.0) * 0.45 + pointerWake * 0.5;
   let position = center + normal * corner.y * widthPixels;
   let mask = inkMask(particle.position);
 
@@ -128,7 +131,7 @@ fn lineVertex(
   out.position = vec4f(position, 0.0, 1.0);
   out.local = corner;
   out.color = inkAbsorption(particle);
-  let baseAlpha = 0.014 + speed * 0.07 + abs(particle.mCurl) * 0.10 + particle.mEnergy * 0.04;
+  let baseAlpha = 0.010 + speed * 0.05 + abs(particle.mCurl) * 0.07 + particle.mEnergy * 0.03;
   out.alpha = render.opacity * mask * lifeFade(particle) * dash * (baseAlpha + pointerWake * 0.06);
   return out;
 }
@@ -140,47 +143,4 @@ fn lineFragment(input: VertexOut) -> @location(0) vec4f {
   let tailFade = 1.0 - smoothstep(0.8, 1.0, input.local.x) * 0.3;
   let alpha = input.alpha * side * headFade * tailFade;
   return vec4f(input.color, alpha);
-}
-
-@vertex
-fn spriteVertex(
-  @builtin(vertex_index) vertexIndex: u32,
-  @builtin(instance_index) instanceIndex: u32,
-) -> VertexOut {
-  let particle = particles[instanceIndex];
-  let corners = array<vec2f, 6>(
-    vec2f(-1.0, -1.0),
-    vec2f(1.0, -1.0),
-    vec2f(-1.0, 1.0),
-    vec2f(-1.0, 1.0),
-    vec2f(1.0, -1.0),
-    vec2f(1.0, 1.0),
-  );
-  let corner = corners[vertexIndex];
-  let ndcPixel = vec2f(2.0 / render.viewport.x, 2.0 / render.viewport.y);
-
-  let marker = step(0.985, hash11(particle.seed * 17.17));
-  let blueDot = step(0.9965, hash11(particle.seed * 29.17));
-  let dotted = max(marker, blueDot);
-  let sizeHash = hash11(particle.seed * 41.83);
-  let radiusPixels = (0.7 + sizeHash * 1.3 + blueDot * 1.5) * (0.75 + particle.depth * 0.5) * dotted;
-  let position = particle.position + corner * ndcPixel * radiusPixels;
-  let mask = inkMask(particle.position);
-
-  var navyDotInk = vec3f(2.2, 1.7, 0.9);
-  let blueInk = vec3f(2.6, 1.35, 0.2);
-
-  var out: VertexOut;
-  out.position = vec4f(position, 0.0, 1.0);
-  out.local = corner;
-  out.color = mix(navyDotInk, blueInk, blueDot);
-  out.alpha = render.opacity * mask * lifeFade(particle) * (marker * 0.22 + blueDot * 0.4);
-  return out;
-}
-
-@fragment
-fn spriteFragment(input: VertexOut) -> @location(0) vec4f {
-  let distance = length(input.local);
-  let disc = smoothstep(1.0, 0.35, distance);
-  return vec4f(input.color, input.alpha * disc);
 }

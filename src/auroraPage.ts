@@ -17,7 +17,7 @@ export function mountAuroraPage(root: HTMLDivElement): PageHandle {
       "A dense field of routed particles drifting through drifting curtains, lens-like attractors, and reactive wake lines.",
     actions: [
       { href: "/flow-field", label: "Open flow field", variant: "primary" },
-      { href: "/waves", label: "View waves", variant: "secondary" },
+      { href: "/flow-sheet", label: "View flow sheet", variant: "secondary" },
     ],
   });
 

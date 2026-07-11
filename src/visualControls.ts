@@ -80,14 +80,12 @@ export interface VisualControls {
       idleDecay: number;
       reducedMotionIdleDecay: number;
     };
-    architecture: {
-      moveStrengthGain: number;
-      maxStrength: number;
-      leaveStrengthCap: number;
+    flowSheet: {
       lerpRate: number;
-      reducedMotionScale: number;
       idleDecay: number;
-      reducedMotionIdleDecay: number;
+      reducedMotionScale: number;
+      grabResponse: number;
+      grabRelease: number;
     };
   };
   performance: {
@@ -95,15 +93,12 @@ export interface VisualControls {
       flow: number;
       aurora: number;
       topography: number;
-      architecture: number;
-      waves: number;
-      wavesUniform: number;
+      flowSheet: number;
       livingGlass: number;
     };
     sampleCount: {
       topography: number;
-      architecture: number;
-      waves: number;
+      flowSheet: number;
     };
   };
   geometry: {
@@ -111,8 +106,9 @@ export interface VisualControls {
       segments: number;
       shapes: readonly TopographyShapeControl[];
     };
-    waves: {
-      rowCount: number;
+    flowSheet: {
+      layerCount: number;
+      rowsPerLayer: number;
       pointCount: number;
     };
   };
@@ -228,14 +224,12 @@ export const defaultVisualControls = {
       idleDecay: 0.97,
       reducedMotionIdleDecay: 0.92,
     },
-    architecture: {
-      moveStrengthGain: 0.035,
-      maxStrength: 0.22,
-      leaveStrengthCap: 0.06,
-      lerpRate: 0.032,
-      reducedMotionScale: 0.08,
-      idleDecay: 0.88,
-      reducedMotionIdleDecay: 0.78,
+    flowSheet: {
+      lerpRate: 0.1,
+      idleDecay: 0.96,
+      reducedMotionScale: 0.28,
+      grabResponse: 0.18,
+      grabRelease: 0.012,
     },
   },
   performance: {
@@ -243,15 +237,12 @@ export const defaultVisualControls = {
       flow: 2,
       aurora: 2,
       topography: 2.5,
-      architecture: 2.4,
-      waves: 3.25,
-      wavesUniform: 2.5,
+      flowSheet: 2.5,
       livingGlass: 2,
     },
     sampleCount: {
       topography: 4,
-      architecture: 4,
-      waves: 4,
+      flowSheet: 4,
     },
   },
   geometry: {
@@ -340,9 +331,10 @@ export const defaultVisualControls = {
         },
       ],
     },
-    waves: {
-      rowCount: 236,
-      pointCount: 312,
+    flowSheet: {
+      layerCount: 1,
+      rowsPerLayer: 104,
+      pointCount: 640,
     },
   },
 } as const satisfies VisualControls;

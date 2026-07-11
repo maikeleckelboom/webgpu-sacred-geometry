@@ -6,8 +6,8 @@ import { connectStudyRenderer, mountStudyFrame, type PageHandle } from "./studyF
 const HERO_FLOW_THEME_STORAGE_KEY = "hero-flow-theme";
 
 // Portfolio hero prototype: the dark theme runs the existing aurora flow
-// field untouched, while the light theme swaps in the "northern ink"
-// renderer (navy streamlines + glowing ring on paper). Each toggle tears
+// field untouched, while the light theme swaps in the monochrome ink
+// renderer (graphite streamlines on paper). Each toggle tears
 // down the active renderer and boots the other one on a fresh canvas.
 export function mountHeroFlowPage(root: HTMLDivElement): PageHandle {
   setPageBodyClass("hero-flow-page-body");
@@ -26,7 +26,7 @@ export function mountHeroFlowPage(root: HTMLDivElement): PageHandle {
       "A luminous field of routed particles, drifting curtains, and reactive wake lines moving through soft attractors.",
     actions: [
       { href: "/topography", label: "Open topography", variant: "primary" },
-      { href: "/architecture", label: "View architecture", variant: "secondary" },
+      { href: "/flow-sheet", label: "View flow sheet", variant: "secondary" },
     ],
   });
 

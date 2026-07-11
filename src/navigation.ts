@@ -1,19 +1,17 @@
 export type LabRoute =
   | "flow-field"
+  | "flow-sheet"
   | "hero-flow"
   | "aurora"
   | "topography"
-  | "architecture"
-  | "waves"
   | "living-glass";
 
 const navItems: Array<{ route: LabRoute; href: string; label: string }> = [
   { route: "flow-field", href: "/flow-field", label: "Flow field" },
+  { route: "flow-sheet", href: "/flow-sheet", label: "Flow sheet" },
   { route: "hero-flow", href: "/hero-flow", label: "Hero flow" },
   { route: "aurora", href: "/aurora", label: "Aurora" },
   { route: "topography", href: "/topography", label: "Topography" },
-  { route: "architecture", href: "/architecture", label: "Architecture" },
-  { route: "waves", href: "/waves", label: "Waves" },
   { route: "living-glass", href: "/living-glass", label: "Living glass" },
 ];
 

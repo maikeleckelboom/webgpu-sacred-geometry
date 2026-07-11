@@ -35,10 +35,9 @@ body.living-glass-page-body {
 }
 
 body.topography-page-body,
-body.architecture-page-body,
-body.waves-page-body {
+body.flow-sheet-page-body {
   color-scheme: light;
-  background: #f8f8f5;
+  background: #fafaf8;
 }
 
 body.flow-page-body .lab-header,
@@ -67,15 +66,15 @@ body.flow-page-body.flow-page-body--light .lab-header {
 
 body.hero-flow-page-body.hero-flow-page-body--light {
   color-scheme: light;
-  background: #f1f3f6;
+  background: #f3f3f1;
 }
 
 body.hero-flow-page-body.hero-flow-page-body--light .lab-header {
-  --lab-surface: rgba(241, 243, 246, 0.88);
-  --lab-text: #16202c;
-  --lab-muted: rgba(22, 32, 44, 0.6);
-  --lab-border: rgba(22, 32, 44, 0.12);
-  --lab-active: #10513b;
+  --lab-surface: rgba(244, 244, 242, 0.88);
+  --lab-text: #1c1d1f;
+  --lab-muted: rgba(28, 29, 31, 0.6);
+  --lab-border: rgba(28, 29, 31, 0.12);
+  --lab-active: #3c3d40;
 }
 
 #app {
@@ -251,21 +250,20 @@ body.hero-flow-page-body.hero-flow-page-body--light .lab-header {
 }
 
 .study-page--hero-flow.is-flow-light {
-  --study-bg: #f1f3f6;
-  --study-text: #16202c;
-  --study-status-bg: rgba(248, 250, 252, 0.92);
-  --study-status-border: rgba(22, 32, 44, 0.16);
-  --hero-kicker: #10745a;
-  --hero-muted: #5c6a79;
-  --hero-secondary-border: rgba(22, 32, 44, 0.3);
+  --study-bg: #f3f3f1;
+  --study-text: #1c1d1f;
+  --study-status-bg: rgba(248, 248, 246, 0.92);
+  --study-status-border: rgba(28, 29, 31, 0.16);
+  --hero-kicker: #4b4c4f;
+  --hero-muted: #606164;
+  --hero-secondary-border: rgba(28, 29, 31, 0.3);
 }
 
-.study-page--architecture {
-  --study-bg: #f2f2ee;
-}
-
-.study-page--waves {
-  --study-bg: #f8f7f2;
+.study-page--flow-sheet {
+  --study-bg: #fafaf8;
+  --study-text: #242529;
+  --study-status-bg: rgba(250, 250, 248, 0.92);
+  --study-status-border: rgba(36, 37, 41, 0.16);
 }
 
 .flow-canvas,
@@ -278,12 +276,10 @@ body.hero-flow-page-body.hero-flow-page-body--light .lab-header {
   background: #f8f8f5;
 }
 
-.architecture-canvas {
-  background: #f2f2ee;
-}
-
-.waves-canvas {
-  background: #f8f7f2;
+.flow-sheet-canvas {
+  background: #fafaf8;
+  cursor: crosshair;
+  touch-action: none;
 }
 
 .study-page--flow.is-flow-light .flow-canvas {
@@ -295,7 +291,7 @@ body.hero-flow-page-body.hero-flow-page-body--light .lab-header {
 }
 
 .study-page--hero-flow.is-flow-light .hero-flow-canvas {
-  background: #f1f3f6;
+  background: #f3f3f1;
 }
 
 /* The hero-flow prototype shows the actual hero copy on top of the canvas. */
@@ -361,6 +357,17 @@ body.hero-flow-page-body.hero-flow-page-body--light .lab-header {
 .study-page--hero-flow .study-action--primary:focus-visible {
   background: #175139;
   transform: translateY(-1px);
+}
+
+.study-page--hero-flow.is-flow-light .study-action--primary {
+  color: #fff;
+  background: #292a2c;
+  box-shadow: 0 0.9rem 1.9rem rgba(20, 20, 20, 0.16);
+}
+
+.study-page--hero-flow.is-flow-light .study-action--primary:hover,
+.study-page--hero-flow.is-flow-light .study-action--primary:focus-visible {
+  background: #111214;
 }
 
 .study-page--hero-flow .study-action--secondary {
@@ -446,30 +453,30 @@ body.hero-flow-page-body.hero-flow-page-body--light .lab-header {
 }
 
 .flow-theme-toggle.is-light {
-  border-color: rgba(15, 77, 82, 0.18);
-  color: #06343a;
-  background: rgba(248, 251, 247, 0.76);
-  box-shadow: 0 0.7rem 2rem rgba(10, 40, 38, 0.13);
+  border-color: rgba(28, 29, 31, 0.18);
+  color: #262729;
+  background: rgba(248, 248, 246, 0.78);
+  box-shadow: 0 0.7rem 2rem rgba(20, 20, 20, 0.12);
 }
 
 .flow-theme-toggle.is-light:hover,
 .flow-theme-toggle.is-light:focus-visible {
-  border-color: rgba(11, 104, 114, 0.36);
-  background: rgba(255, 255, 252, 0.9);
+  border-color: rgba(28, 29, 31, 0.38);
+  background: rgba(255, 255, 253, 0.92);
 }
 
 .flow-theme-toggle.is-light:focus-visible {
-  outline-color: rgba(11, 104, 114, 0.6);
+  outline-color: rgba(28, 29, 31, 0.58);
 }
 
 .flow-theme-toggle.is-light .flow-theme-toggle__track {
-  border-color: rgba(6, 52, 58, 0.16);
-  background: rgba(11, 104, 114, 0.12);
+  border-color: rgba(28, 29, 31, 0.16);
+  background: rgba(28, 29, 31, 0.1);
 }
 
 .flow-theme-toggle.is-light .flow-theme-toggle__thumb {
-  background: #0b6872;
-  box-shadow: 0 0 0.55rem rgba(11, 104, 114, 0.25);
+  background: #454648;
+  box-shadow: 0 0 0.55rem rgba(28, 29, 31, 0.22);
   transform: translateX(0.9rem);
 }
 

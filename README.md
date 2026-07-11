@@ -23,9 +23,5 @@ Open the local Vite URL in a WebGPU-capable browser.
 - `/flow-field` drives a high-key editorial composition from a single mathematical vector field: curl noise, three moving vortex attractors, an aurora shear curtain, a hidden golden-angle attractor lattice, field-metric-driven particle styling, and an accumulation buffer trail memory.
 - `/aurora` keeps the older aurora particle field (sine-flow + lens attractors + curtains) as a separate study.
 - `/topography` adds a grayscale terrain study with procedural contour layers, metallic lighting, fog, and a post-process lens pass.
-- `/architecture` adds a premium architectural network field with clustered nodes, instanced rails, translucent planes, depth focus, and reduced-motion-aware camera drift.
-- `/waves` adds a high-key graphite streamline reconstruction of the supplied WebGPU waves reference.
+- `/flow-sheet` folds layered graphite trajectories through a dimensional throat with quiet drift and pointer parallax.
 - `/living-glass` adds a compact volumetric nebula with refractive glass normals, star glints, and a quality selector that changes render scale plus shader detail.
-
-The architecture R&D note lives in [`docs/architecture-network-rd.md`](docs/architecture-network-rd.md).
-The waves R&D note lives in [`docs/webgpu-waves-rd.md`](docs/webgpu-waves-rd.md).

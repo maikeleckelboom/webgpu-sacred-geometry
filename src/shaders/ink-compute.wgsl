@@ -24,8 +24,8 @@ struct Sim {
   time: f32,
   aspect: f32,
   motion: f32,
-  pointer: vec2f,
-  pointerStrength: f32,
+  per: vec2f,
+  perStrength: f32,
   pressure: f32,
 }
 
@@ -37,16 +37,16 @@ fn hash11(value: f32) -> f32 {
   return fract(sin(value * 127.1) * 43758.5453123);
 }
 
-fn hash22(point: vec2f) -> vec2f {
-  let q = vec2f(dot(point, vec2f(127.1, 311.7)), dot(point, vec2f(269.5, 183.3)));
+fn hash22(p: vec2f) -> vec2f {
+  let q = vec2f(dot(p, vec2f(127.1, 311.7)), dot(p, vec2f(269.5, 183.3)));
   return -1.0 + 2.0 * fract(sin(q) * 43758.5453);
 }
 
-fn snoise(point: vec2f) -> f32 {
+fn snoise(p: vec2f) -> f32 {
   let K1 = 0.366025404;
   let K2 = 0.211324865;
-  let i = floor(point + (point.x + point.y) * K1);
-  let a = point - i + (i.x + i.y) * K2;
+  let i = floor(p + (p.x + p.y) * K1);
+  let a = p - i + (i.x + i.y) * K2;
   let o = step(a.yx, a.xy);
   let b = a - o + K2;
   let c = a - 1.0 + 2.0 * K2;
@@ -59,8 +59,8 @@ fn snoise(point: vec2f) -> f32 {
   return dot(n, vec3f(70.0, 70.0, 70.0));
 }
 
-fn curlNoise2D(point: vec2f, time: f32) -> vec2f {
-  let pT = point + vec2f(time * 0.08, -time * 0.06);
+fn curlNoise2D(p: vec2f, time: f32) -> vec2f {
+  let pT = p + vec2f(time * 0.08, -time * 0.06);
   let eps = 0.08;
   let n1 = snoise(pT + vec2f(0.0, eps));
   let n2 = snoise(pT - vec2f(0.0, eps));
@@ -69,8 +69,17 @@ fn curlNoise2D(point: vec2f, time: f32) -> vec2f {
   return vec2f((n1 - n2), -(n3 - n4)) / (2.0 * eps);
 }
 
-fn ringCenter() -> vec2f {
-  return vec2f(sim.aspect * RING_CENTER_X, RING_CENTER_Y);
+// The ring wanders on a slow Lissajous path (incommensurate frequencies,
+// so it never visibly repeats). The post shader mirrors this exactly.
+fn ringCenter(time: f32) -> vec2f {
+  let drift = vec2f(sin(time * 0.047) * 0.07, cos(time * 0.036) * 0.055);
+  return vec2f(sim.aspect * RING_CENTER_X, RING_CENTER_Y) + drift;
+}
+
+fn vortex(p: vec2f, center: vec2f, strength: f32) -> vec2f {
+  let d = p - center;
+  let r2 = dot(d, d) + 0.02;
+  return strength * vec2f(-d.y, d.x) / r2;
 }
 
 // The ink field lives in aspect-corrected space so the ring stays circular.
@@ -79,7 +88,7 @@ fn ringCenter() -> vec2f {
 fn inkField(position: vec2f, time: f32) -> vec2f {
   let a = sim.aspect;
   let q = vec2f(position.x * a, position.y);
-  let c = ringCenter();
+  let c = ringCenter(time);
   let d = q - c;
   let r = length(d) + 0.0001;
   let er = d / r;
@@ -91,16 +100,26 @@ fn inkField(position: vec2f, time: f32) -> vec2f {
   var f = et * (0.42 * band + 0.12 * wide);
   f += -er * (r - RING_RADIUS) * 0.12 * (1.0 - smoothstep(0.0, 1.35, abs(r - RING_RADIUS)));
 
+  // Two wandering vortices orbit the ring on incommensurate paths and
+  // keep shedding new structure into the feathers.
+  let v1 = c + vec2f(cos(time * 0.11), sin(time * 0.083)) * RING_RADIUS * 1.7;
+  let v2 = c + vec2f(cos(-time * 0.067 + 2.1), sin(-time * 0.091 + 1.3)) * RING_RADIUS * 2.4;
+  f += vortex(q, v1, 0.55) * 0.05;
+  f += vortex(q, v2, -0.45) * 0.05;
+
   // Horizontal curtains drifting in from the left, converging on the ring.
   let inflow = 1.0 - smoothstep(c.x - RING_RADIUS * 1.5, c.x - RING_RADIUS * 0.3, q.x);
-  let sway = snoise(vec2f(q.y * 1.7 + time * 0.06, q.x * 0.42 - time * 0.03));
+  let sway = snoise(vec2f(q.y * 1.7 + time * 0.1, q.x * 0.42 - time * 0.055));
   f += vec2f(0.26 + sway * 0.05, (c.y - q.y) * 0.16 + sway * 0.09) * inflow;
 
-  // Fine feathery turbulence, strongest around the ring band. Two octaves:
-  // a broad drift plus a tighter comb that breaks streams into hairs.
+  // Fine feathery turbulence, strongest around the ring band. The sampling
+  // domain is itself warped by a slower curl field (domain warping), so the
+  // structures fold and breathe instead of scrolling in place.
+  let warp = curlNoise2D(q * 0.7 + vec2f(3.1, 5.2), time * 0.25) * 0.35;
+  let qw = q + warp;
   let feather = 0.11 + band * 0.04;
-  f += curlNoise2D(q * 1.45, time * 0.6) * feather;
-  f += curlNoise2D(q * 3.4 + vec2f(7.3, -2.1), time * 0.45) * 0.045 * (1.0 - band * 0.6);
+  f += curlNoise2D(qw * 1.45, time * 0.85) * feather;
+  f += curlNoise2D(qw * 3.4 + vec2f(7.3, -2.1), time * 0.6) * 0.045 * (1.0 - band * 0.6);
 
   // Calm the ring interior so the paper stays clean.
   let interior = 1.0 - smoothstep(RING_RADIUS * 0.35, RING_RADIUS * 0.9, r);
@@ -109,13 +128,13 @@ fn inkField(position: vec2f, time: f32) -> vec2f {
   return vec2f(f.x / a, f.y);
 }
 
-fn fieldMetricsAt(point: vec2f, time: f32) -> vec4f {
+fn fieldMetricsAt(p: vec2f, time: f32) -> vec4f {
   let eps = FIELD_EPS;
-  let fxp = inkField(point + vec2f(eps, 0.0), time);
-  let fxn = inkField(point - vec2f(eps, 0.0), time);
-  let fyp = inkField(point + vec2f(0.0, eps), time);
-  let fyn = inkField(point - vec2f(0.0, eps), time);
-  let f = inkField(point, time);
+  let fxp = inkField(p + vec2f(eps, 0.0), time);
+  let fxn = inkField(p - vec2f(eps, 0.0), time);
+  let fyp = inkField(p + vec2f(0.0, eps), time);
+  let fyn = inkField(p - vec2f(0.0, eps), time);
+  let f = inkField(p, time);
   let speed = length(f);
   let curl = (fyp.x - fyn.x - fxp.y + fxn.y) / (2.0 * eps);
   let div = (fxp.x - fxn.x + fyp.y - fyn.y) / (2.0 * eps);
@@ -123,19 +142,19 @@ fn fieldMetricsAt(point: vec2f, time: f32) -> vec4f {
   return vec4f(speed, curl, div, energy);
 }
 
-fn mouseField(point: vec2f) -> vec2f {
-  if (sim.pointerStrength < 0.001) {
+fn mouseField(p: vec2f) -> vec2f {
+  if (sim.perStrength < 0.001) {
     return vec2f(0.0);
   }
-  let d = sim.pointer - point;
+  let d = sim.per - p;
   let r = length(d) + 0.001;
   let toward = d / r;
   let tangent = vec2f(-toward.y, toward.x);
   let radius = 0.38 + sim.pressure * 0.14;
-  let falloff = (1.0 - smoothstep(0.02, radius, r)) * sim.pointerStrength;
+  let falloff = (1.0 - smoothstep(0.02, radius, r)) * sim.perStrength;
   let core = 1.0 - smoothstep(0.0, 0.08, r);
   let charge = 1.0 + sim.pressure * PRESSURE_SWIRL_BOOST;
-  return (tangent * falloff * 0.14 + toward * falloff * 0.03 - toward * core * sim.pointerStrength * 0.05) * charge;
+  return (tangent * falloff * 0.14 + toward * falloff * 0.03 - toward * core * sim.perStrength * 0.05) * charge;
 }
 
 fn spawn(seed: f32, epoch: f32) -> Particle {
@@ -152,7 +171,7 @@ fn spawn(seed: f32, epoch: f32) -> Particle {
   // Keep spawns out of the ring interior.
   let a = sim.aspect;
   var q = vec2f(position.x * a, position.y);
-  let c = ringCenter();
+  let c = ringCenter(sim.time);
   let d = q - c;
   let r = length(d);
   if (r < RING_RADIUS * 1.05) {
