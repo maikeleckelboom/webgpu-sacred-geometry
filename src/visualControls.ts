@@ -11,12 +11,61 @@ export interface TopographyShapeControl {
   focus: number;
 }
 
+export interface AuroraControls {
+  composition: {
+    primaryWidth: number;
+    secondaryWidth: number;
+    desktopRevealStart: number;
+    compactRevealStart: number;
+  };
+  dynamics: {
+    primarySpeed: number;
+    secondarySpeed: number;
+    laneRestoration: number;
+    localVariation: number;
+  };
+  population: {
+    count: number;
+    primaryShare: number;
+    secondaryShare: number;
+    compactVisibleShare: number;
+  };
+  rendering: {
+    lineOpacity: number;
+    spriteOpacity: number;
+    desktopTrailPixels: number;
+    compactTrailPixels: number;
+  };
+  exposure: {
+    sceneGain: number;
+    glowGain: number;
+    toneMapExposure: number;
+  };
+  pointer: {
+    desktopRadiusCss: number;
+    compactRadiusCss: number;
+    enterTimeMs: number;
+    leaveTimeMs: number;
+    maxDisplacementCss: number;
+    clearing: number;
+    edgeGain: number;
+  };
+  responsive: {
+    compactMaxWidth: number;
+    compactAspect: number;
+  };
+  reducedMotion: {
+    advectionScale: number;
+    pointerStrength: number;
+  };
+}
+
 export interface VisualControls {
   particles: {
     flowCount: number;
-    auroraCount: number;
     flowTrailDecay: number;
   };
+  aurora: AuroraControls;
   flow: {
     modeTransitionRate: number;
     reducedMotionScale: number;
@@ -25,7 +74,6 @@ export interface VisualControls {
     shaderLocalFiles: readonly string[];
   };
   sky: {
-    auroraPointerHome: Vec2Control;
     refractiveNebula: {
       defaultOptions: {
         quality: "low" | "medium" | "high" | "ultra";
@@ -62,14 +110,6 @@ export interface VisualControls {
       pressureReleaseRate: number;
       pressureChargeReducedMotionScale: number;
       pressureReleaseReducedMotionScale: number;
-    };
-    aurora: {
-      moveStrengthGain: number;
-      leaveStrengthCap: number;
-      lerpRate: number;
-      idleDecay: number;
-      reducedMotionIdleDecay: number;
-      reducedMotionScale: number;
     };
     topography: {
       enterStrength: number;
@@ -126,8 +166,55 @@ interface RefractiveNebulaQualityControl {
 export const defaultVisualControls = {
   particles: {
     flowCount: 36000,
-    auroraCount: 72000,
     flowTrailDecay: 0.965,
+  },
+  aurora: {
+    composition: {
+      primaryWidth: 0.22,
+      secondaryWidth: 0.12,
+      desktopRevealStart: -0.34,
+      compactRevealStart: -1.08,
+    },
+    dynamics: {
+      primarySpeed: 0.115,
+      secondarySpeed: 0.071,
+      laneRestoration: 0.82,
+      localVariation: 0.011,
+    },
+    population: {
+      count: 42000,
+      primaryShare: 0.86,
+      secondaryShare: 0.1,
+      compactVisibleShare: 0.56,
+    },
+    rendering: {
+      lineOpacity: 0.94,
+      spriteOpacity: 0.38,
+      desktopTrailPixels: 46,
+      compactTrailPixels: 34,
+    },
+    exposure: {
+      sceneGain: 0.98,
+      glowGain: 0.24,
+      toneMapExposure: 1.02,
+    },
+    pointer: {
+      desktopRadiusCss: 150,
+      compactRadiusCss: 100,
+      enterTimeMs: 140,
+      leaveTimeMs: 350,
+      maxDisplacementCss: 14,
+      clearing: 0.2,
+      edgeGain: 0.1,
+    },
+    responsive: {
+      compactMaxWidth: 680,
+      compactAspect: 0.82,
+    },
+    reducedMotion: {
+      advectionScale: 0.18,
+      pointerStrength: 0,
+    },
   },
   flow: {
     modeTransitionRate: 7.0,
@@ -141,7 +228,6 @@ export const defaultVisualControls = {
     ],
   },
   sky: {
-    auroraPointerHome: [0.42, 0],
     refractiveNebula: {
       defaultOptions: {
         quality: "medium",
@@ -206,14 +292,6 @@ export const defaultVisualControls = {
       pressureReleaseRate: 3.0,
       pressureChargeReducedMotionScale: 0.5,
       pressureReleaseReducedMotionScale: 0.6,
-    },
-    aurora: {
-      moveStrengthGain: 0.18,
-      leaveStrengthCap: 0.18,
-      lerpRate: 0.065,
-      idleDecay: 0.965,
-      reducedMotionIdleDecay: 0.9,
-      reducedMotionScale: 0.28,
     },
     topography: {
       enterStrength: 1,

@@ -1,5 +1,3 @@
-
-
 struct Particle {
   position: vec2f,
   velocity: vec2f,
@@ -14,9 +12,14 @@ struct Sim {
   time: f32,
   aspect: f32,
   motion: f32,
-  pointer: vec2f,
-  pointerStrength: f32,
-  padding: f32,
+  compactness: f32,
+  primarySpeed: f32,
+  secondarySpeed: f32,
+  laneRestoration: f32,
+  localVariation: f32,
+  primaryWidth: f32,
+  secondaryWidth: f32,
+  primaryShare: f32,
 }
 
 @group(0) @binding(0) var<storage, read> sourceParticles: array<Particle>;
@@ -27,82 +30,78 @@ fn hash11(value: f32) -> f32 {
   return fract(sin(value * 127.1) * 43758.5453123);
 }
 
+fn primaryCenter(x: f32, compactness: f32) -> f32 {
+  let desktop =
+    0.42 - smoothstep(-0.52, 0.92, x) * 0.36 + sin((x + 0.35) * 2.1) * 0.1;
+  let compact =
+    0.48 - smoothstep(-0.85, 0.9, x) * 0.2 + sin((x + 0.2) * 2.1) * 0.06;
+  return mix(desktop, compact, compactness);
+}
+
+fn secondaryCenter(x: f32, compactness: f32) -> f32 {
+  return primaryCenter(x, compactness) +
+    mix(-0.32, -0.28, compactness) +
+    sin(x * 1.6 + 1.2) * 0.025;
+}
+
+fn layerValue(seed: f32) -> f32 {
+  return hash11(seed * 5.19);
+}
+
+fn isSecondary(seed: f32) -> bool {
+  return layerValue(seed) >= sim.primaryShare;
+}
+
+fn centerForParticle(x: f32, seed: f32, compactness: f32) -> f32 {
+  if (isSecondary(seed)) {
+    return secondaryCenter(x, compactness);
+  }
+
+  return primaryCenter(x, compactness);
+}
+
+fn widthForParticle(seed: f32) -> f32 {
+  if (isSecondary(seed)) {
+    return sim.secondaryWidth;
+  }
+
+  return sim.primaryWidth;
+}
+
+fn speedForParticle(seed: f32) -> f32 {
+  if (isSecondary(seed)) {
+    return sim.secondarySpeed;
+  }
+
+  return sim.primarySpeed;
+}
+
+fn flowTangent(x: f32, seed: f32, compactness: f32) -> vec2f {
+  let epsilon = 0.018;
+  let before = centerForParticle(x - epsilon, seed, compactness);
+  let after = centerForParticle(x + epsilon, seed, compactness);
+  return normalize(vec2f(epsilon * 2.0, after - before));
+}
+
 fn spawn(seed: f32, epoch: f32) -> Particle {
   let h0 = hash11(seed + epoch * 1.37);
   let h1 = hash11(seed * 2.31 + epoch * 1.91);
   let h2 = hash11(seed * 3.73 + epoch * 2.17);
-  let h3 = hash11(seed * 5.19 + epoch * 2.73);
-  let h4 = hash11(seed * 7.41 + epoch * 3.11);
-  let h5 = hash11(seed * 11.7 + epoch * 3.97);
-  let h6 = hash11(seed * 13.3 + epoch * 5.23);
+  let h3 = hash11(seed * 11.7 + epoch * 3.97);
+  let lane = mix(-1.0, 1.0, h1);
+  let x = mix(-1.36, -1.28, h0);
+  let width = widthForParticle(seed);
+  let y = centerForParticle(x, seed, sim.compactness) + lane * width * (0.28 + h2 * 0.72);
+  let tangent = flowTangent(x, seed, sim.compactness);
 
   var particle: Particle;
-  particle.position = vec2f(mix(-0.92, 1.46, h0), mix(-1.12, 1.1, h1));
-  particle.velocity = vec2f(mix(0.04, 0.18, h2), mix(-0.11, 0.12, h3));
+  particle.position = vec2f(x, y);
+  particle.velocity = tangent * speedForParticle(seed);
   particle.seed = seed;
-  particle.depth = h4;
-  particle.age = h5 * mix(10.0, 20.0, h4);
-  particle.lane = mix(-1.0, 1.0, h6);
+  particle.depth = h2;
+  particle.age = h3 * 0.08;
+  particle.lane = lane;
   return particle;
-}
-
-fn flowNoise(point: vec2f, lane: f32, time: f32) -> vec2f {
-  let waveA = sin((point.y + lane * 0.12) * 8.4 + point.x * 1.9 + time * 0.31);
-  let waveB = cos((point.x - lane * 0.08) * 6.7 - point.y * 1.6 - time * 0.24);
-  let waveC = sin((point.x * 3.4 - point.y * 4.1) + lane * 2.2 + time * 0.17);
-  let waveD = cos((point.x * 2.1 + point.y * 3.6) - time * 0.19);
-  return normalize(vec2f(waveA + waveC * 0.72, waveB - waveD * 0.58) + vec2f(0.001, -0.002));
-}
-
-fn basin(point: vec2f, center: vec2f, radius: f32) -> f32 {
-  return 1.0 - smoothstep(radius * 0.14, radius, length(point - center));
-}
-
-fn vortex(point: vec2f, center: vec2f, spin: f32, radius: f32, orbitStrength: f32, pullStrength: f32) -> vec2f {
-  let toCenter = center - point;
-  let distance = max(length(toCenter), 0.001);
-  let toward = toCenter / distance;
-  let tangent = vec2f(-toward.y, toward.x) * spin;
-  let outer = 1.0 - smoothstep(radius * 0.28, radius * 1.42, distance);
-  let inner = 1.0 - smoothstep(radius * 0.04, radius * 0.64, distance);
-  let shell = outer * (0.34 + inner * 0.66);
-  return tangent * orbitStrength * shell + toward * pullStrength * inner;
-}
-
-fn lensPosition(slot: u32, time: f32, pointer: vec2f, pointerStrength: f32) -> vec2f {
-  var base = vec2f(0.58, -0.28);
-  var drift = vec2f(sin(time * 0.18) * 0.035, cos(time * 0.14) * 0.026);
-
-  if (slot == 1u) {
-    base = vec2f(0.94, 0.23);
-    drift = vec2f(cos(time * 0.13) * 0.03, sin(time * 0.17) * 0.025);
-  } else if (slot == 2u) {
-    base = vec2f(1.18, -0.5);
-    drift = vec2f(sin(time * 0.1) * 0.045, cos(time * 0.12) * 0.03);
-  } else if (slot == 3u) {
-    base = vec2f(0.28, 0.49);
-    drift = vec2f(cos(time * 0.11) * 0.034, sin(time * 0.13) * 0.03);
-  } else if (slot == 4u) {
-    base = vec2f(1.25, 0.45);
-    drift = vec2f(cos(time * 0.09) * 0.025, sin(time * 0.18) * 0.024);
-  }
-
-  let moving = base + drift;
-  let toPointer = pointer - moving;
-  let pointerPull = (1.0 - smoothstep(0.04, 0.48, length(toPointer))) * pointerStrength;
-  return moving + toPointer * pointerPull * 0.08;
-}
-
-fn lensGravity(point: vec2f, lens: vec2f, radius: f32, mass: f32, spin: f32) -> vec2f {
-  let toLens = lens - point;
-  let distance = max(length(toLens), 0.001);
-  let toward = toLens / distance;
-  let tangent = vec2f(-toward.y, toward.x) * spin;
-  let shell = smoothstep(radius * 1.15, radius * 4.0, distance) * (1.0 - smoothstep(radius * 7.0, radius * 13.0, distance));
-  let wide = 1.0 - smoothstep(radius * 4.0, radius * 16.0, distance);
-  let core = 1.0 - smoothstep(radius * 0.65, radius * 2.0, distance);
-  let softened = 1.0 / (1.0 + distance * distance * 10.0);
-  return tangent * mass * 0.58 * shell * softened + toward * mass * 0.16 * wide * softened - toward * mass * 0.28 * core;
 }
 
 @compute @workgroup_size(64)
@@ -113,79 +112,46 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u) {
 
   let index = globalId.x;
   var particle = sourceParticles[index];
-  let lifetime = mix(10.0, 20.0, hash11(particle.seed * 3.91));
-  let epoch = floor(sim.time * 0.046 + particle.seed * 0.013);
+  let lifetime = mix(24.0, 44.0, hash11(particle.seed * 3.91));
+  let epoch = floor(sim.time / lifetime + particle.seed * 0.017);
 
   if (
     particle.age > lifetime ||
-    particle.position.x < -1.08 ||
-    particle.position.x > 1.62 ||
-    abs(particle.position.y) > 1.3
+    particle.position.x < -1.48 ||
+    particle.position.x > 1.36 ||
+    abs(particle.position.y) > 1.24
   ) {
     particle = spawn(particle.seed, epoch);
   }
 
   let deltaTime = min(sim.deltaTime, 0.033);
-  let position = particle.position;
-  let centerA = vec2f(0.34 + sin(sim.time * 0.09) * 0.045, -0.04 + cos(sim.time * 0.11) * 0.035);
-  let centerB = vec2f(0.72 + cos(sim.time * 0.13) * 0.052, 0.32 + sin(sim.time * 0.10) * 0.045);
-  let centerC = vec2f(0.78 + sin(sim.time * 0.10) * 0.048, -0.42 + cos(sim.time * 0.12) * 0.055);
-  let centerD = vec2f(1.13 + cos(sim.time * 0.08) * 0.045, 0.03 + sin(sim.time * 0.16) * 0.05);
-  let centerE = vec2f(0.05 + cos(sim.time * 0.07) * 0.045, 0.55 + sin(sim.time * 0.09) * 0.04);
-  let centerF = vec2f(0.08 + sin(sim.time * 0.06) * 0.05, -0.73 + cos(sim.time * 0.10) * 0.05);
+  let tangent = flowTangent(particle.position.x, particle.seed, sim.compactness);
+  let normal = vec2f(-tangent.y, tangent.x);
+  let width = widthForParticle(particle.seed);
+  let targetY =
+    centerForParticle(particle.position.x, particle.seed, sim.compactness) +
+    particle.lane * width * (0.28 + particle.depth * 0.72);
+  let laneError = clamp(targetY - particle.position.y, -0.18, 0.18);
+  let slowVariation =
+    sin(particle.position.x * 2.4 + particle.lane * 1.7 + sim.time * 0.08) +
+    sin(particle.position.x * 1.15 - particle.lane * 2.1 - sim.time * 0.055) * 0.42;
+  let targetVelocity =
+    tangent * speedForParticle(particle.seed) +
+    vec2f(0.0, laneError * sim.laneRestoration) +
+    normal * slowVariation * sim.localVariation;
+  let response = 1.0 - exp(-deltaTime * mix(1.35, 2.1, particle.depth));
 
-  let weightA = basin(position, centerA, 1.08);
-  let weightB = basin(position, centerB, 0.8);
-  let weightC = basin(position, centerC, 0.82);
-  let weightD = basin(position, centerD, 0.74);
-  let weightE = basin(position, centerE, 0.78);
-  let weightF = basin(position, centerF, 0.78);
-
-  let curl = flowNoise(position, particle.lane, sim.time);
-  let river = vec2f(0.12, 0.0) + curl * 0.09;
-  let vortexField =
-    vortex(position, centerA, 1.0, 1.08, 0.18, 0.032) +
-    vortex(position, centerB, -1.0, 0.8, 0.13, 0.018) +
-    vortex(position, centerC, -1.0, 0.82, 0.12, 0.02) +
-    vortex(position, centerD, 1.0, 0.74, 0.11, 0.016) +
-    vortex(position, centerE, -1.0, 0.78, 0.08, 0.012) +
-    vortex(position, centerF, 1.0, 0.78, 0.08, 0.012);
-
-  let bridgeAB = normalize(centerB - centerA + vec2f(0.001, 0.001)) * weightA * weightB * 0.07;
-  let bridgeAC = normalize(centerC - centerA + vec2f(0.001, -0.001)) * weightA * weightC * 0.06;
-  let bridgeBD = normalize(centerD - centerB + vec2f(0.001, 0.001)) * weightB * weightD * 0.05;
-  let bridgeCF = normalize(centerC - centerF + vec2f(-0.001, 0.001)) * weightC * weightF * 0.045;
-  let saddle = bridgeAB + bridgeAC + bridgeBD + bridgeCF;
-
-  let lensA = lensPosition(0u, sim.time, sim.pointer, sim.pointerStrength);
-  let lensB = lensPosition(1u, sim.time, sim.pointer, sim.pointerStrength);
-  let lensC = lensPosition(2u, sim.time, sim.pointer, sim.pointerStrength);
-  let lensD = lensPosition(3u, sim.time, sim.pointer, sim.pointerStrength);
-  let lensE = lensPosition(4u, sim.time, sim.pointer, sim.pointerStrength);
-  let lensField =
-    lensGravity(position, lensA, 0.055, 0.076, 1.0) +
-    lensGravity(position, lensB, 0.04, 0.052, -1.0) +
-    lensGravity(position, lensC, 0.07, 0.068, 1.0) +
-    lensGravity(position, lensD, 0.035, 0.046, -1.0) +
-    lensGravity(position, lensE, 0.047, 0.044, 1.0);
-
-  let toPointer = sim.pointer - position;
-  let pointerDistance = max(length(toPointer), 0.001);
-  let pointerToward = toPointer / pointerDistance;
-  let pointerTangent = vec2f(-pointerToward.y, pointerToward.x);
-  let pointerFalloff = (1.0 - smoothstep(0.02, 0.78, pointerDistance)) * sim.pointerStrength;
-  let pointerDeflection = pointerTangent * pointerFalloff * 0.42 + pointerToward * pointerFalloff * 0.18;
-
-  let targetVelocity = river + vortexField + saddle + lensField + pointerDeflection;
-  let response = 0.03 + particle.depth * 0.048 + pointerFalloff * 0.05;
   particle.velocity = mix(particle.velocity, targetVelocity, response);
-  particle.position = particle.position + particle.velocity * deltaTime * sim.motion * (0.5 + particle.depth * 0.5);
-  particle.age = particle.age + deltaTime * (0.68 + particle.depth * 0.34);
+  let velocityLength = length(particle.velocity);
 
-  if (particle.age > lifetime) {
-    particle = spawn(particle.seed, epoch + 1.0);
+  if (velocityLength > 0.18) {
+    particle.velocity = particle.velocity / velocityLength * 0.18;
   }
 
+  particle.position = particle.position + particle.velocity * deltaTime * sim.motion;
+  // Scale lifetime progression with advection so reduced motion preserves the
+  // full distributed composition instead of expiring particles before they
+  // can traverse their authored lanes.
+  particle.age = particle.age + deltaTime * mix(0.82, 1.0, particle.depth) * sim.motion;
   targetParticles[index] = particle;
 }
-

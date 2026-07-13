@@ -1,20 +1,44 @@
-import { defaultVisualControls } from "./visualControls";
 import auroraComputeShaderSource from "./shaders/aurora-compute.wgsl?raw";
 import auroraParticlesShaderSource from "./shaders/aurora-particles.wgsl?raw";
 import auroraPostShaderSource from "./shaders/aurora-post.wgsl?raw";
+import { defaultVisualControls } from "./visualControls";
 
-const AURORA_POINTER_CONTROLS = defaultVisualControls.pointer.aurora;
-const PARTICLE_COUNT = defaultVisualControls.particles.auroraCount;
+const AURORA_CONTROLS = defaultVisualControls.aurora;
+const PARTICLE_COUNT = AURORA_CONTROLS.population.count;
 const WORKGROUP_SIZE = 64;
 const FLOATS_PER_PARTICLE = 8;
-const UNIFORM_FLOATS = 12;
+const SIM_UNIFORM_FLOATS = 12;
+const RENDER_UNIFORM_FLOATS = 24;
 
 interface PointerState {
-  x: number;
-  y: number;
-  targetX: number;
-  targetY: number;
+  clientX: number;
+  clientY: number;
+  localCssX: number;
+  localCssY: number;
+  backingX: number;
+  backingY: number;
+  rendererX: number;
+  rendererY: number;
   strength: number;
+  hovering: boolean;
+  hasPosition: boolean;
+}
+
+interface ResponsiveProfile {
+  compactness: number;
+  interactionRadiusCss: number;
+  revealStart: number;
+  trailPixels: number;
+}
+
+interface PointerDiagnostics {
+  destroy: () => void;
+  update: (
+    pointer: PointerState,
+    rect: DOMRect,
+    profile: ResponsiveProfile,
+    effectivePixelRatio: number,
+  ) => void;
 }
 
 export interface AuroraRenderer {
@@ -43,43 +67,44 @@ export async function startAuroraRenderer(canvas: HTMLCanvasElement): Promise<Au
 
   const gpuContext = context;
   const format = navigator.gpu.getPreferredCanvasFormat();
-  device.addEventListener("uncapturederror", (event) => {
-    console.error(`Flow WebGPU error: ${event.error.message}`);
-  });
-  device.pushErrorScope("validation");
-  const particleData = createInitialParticles(PARTICLE_COUNT);
+  const initialProfile = getResponsiveProfile(canvas);
+  const particleData = createInitialParticles(PARTICLE_COUNT, initialProfile.compactness);
   const particleBuffers = [
-    createStorageBuffer(device, "flow particles A", particleData.byteLength),
-    createStorageBuffer(device, "flow particles B", particleData.byteLength),
+    createStorageBuffer(device, "aurora particles A", particleData.byteLength),
+    createStorageBuffer(device, "aurora particles B", particleData.byteLength),
   ];
 
+  device.addEventListener("uncapturederror", (event) => {
+    console.error(`Aurora WebGPU error: ${event.error.message}`);
+  });
+  device.pushErrorScope("validation");
   device.queue.writeBuffer(particleBuffers[0], 0, particleData);
   device.queue.writeBuffer(particleBuffers[1], 0, particleData);
 
   const simBuffer = device.createBuffer({
-    label: "flow simulation uniforms",
-    size: UNIFORM_FLOATS * Float32Array.BYTES_PER_ELEMENT,
+    label: "aurora simulation uniforms",
+    size: SIM_UNIFORM_FLOATS * Float32Array.BYTES_PER_ELEMENT,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
   const renderBuffer = device.createBuffer({
-    label: "flow render uniforms",
-    size: UNIFORM_FLOATS * Float32Array.BYTES_PER_ELEMENT,
+    label: "aurora render uniforms",
+    size: RENDER_UNIFORM_FLOATS * Float32Array.BYTES_PER_ELEMENT,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
   const computeModule = device.createShaderModule({
-    label: "flow compute shader",
+    label: "aurora compute shader",
     code: auroraComputeShaderSource,
   });
   const renderModule = device.createShaderModule({
-    label: "flow particle render shader",
+    label: "aurora particle render shader",
     code: auroraParticlesShaderSource,
   });
   const postModule = device.createShaderModule({
-    label: "flow post shader",
+    label: "aurora post shader",
     code: auroraPostShaderSource,
   });
   const computePipeline = device.createComputePipeline({
-    label: "flow compute pipeline",
+    label: "aurora compute pipeline",
     layout: "auto",
     compute: {
       module: computeModule,
@@ -92,7 +117,7 @@ export async function startAuroraRenderer(canvas: HTMLCanvasElement): Promise<Au
     format,
     "lineVertex",
     "lineFragment",
-    "flow line pipeline",
+    "aurora line pipeline",
   );
   const spritePipeline = createParticlePipeline(
     device,
@@ -100,10 +125,10 @@ export async function startAuroraRenderer(canvas: HTMLCanvasElement): Promise<Au
     format,
     "spriteVertex",
     "spriteFragment",
-    "flow sprite pipeline",
+    "aurora atmosphere pipeline",
   );
   const postPipeline = device.createRenderPipeline({
-    label: "flow post pipeline",
+    label: "aurora post pipeline",
     layout: "auto",
     vertex: {
       module: postModule,
@@ -145,49 +170,101 @@ export async function startAuroraRenderer(canvas: HTMLCanvasElement): Promise<Au
   const setupError = await device.popErrorScope();
 
   if (setupError) {
-    throw new Error(`Flow WebGPU setup failed: ${setupError.message}`);
+    throw new Error(`Aurora WebGPU setup failed: ${setupError.message}`);
   }
 
   const sampler = device.createSampler({
-    label: "flow post sampler",
+    label: "aurora post sampler",
     magFilter: "linear",
     minFilter: "linear",
   });
-  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reducedMotionMedia = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const finePointerMedia = window.matchMedia("(hover: hover) and (pointer: fine)");
   const pointer: PointerState = {
-    x: defaultVisualControls.sky.auroraPointerHome[0],
-    y: defaultVisualControls.sky.auroraPointerHome[1],
-    targetX: defaultVisualControls.sky.auroraPointerHome[0],
-    targetY: defaultVisualControls.sky.auroraPointerHome[1],
+    clientX: 0,
+    clientY: 0,
+    localCssX: 0,
+    localCssY: 0,
+    backingX: 0,
+    backingY: 0,
+    rendererX: 0,
+    rendererY: 0,
     strength: 0,
+    hovering: false,
+    hasPosition: false,
   };
-  const simUniforms = new Float32Array(UNIFORM_FLOATS);
-  const renderUniforms = new Float32Array(UNIFORM_FLOATS);
+  const diagnostics = createPointerDiagnostics(canvas);
+  const simUniforms = new Float32Array(SIM_UNIFORM_FLOATS);
+  const renderUniforms = new Float32Array(RENDER_UNIFORM_FLOATS);
   const abortController = new AbortController();
+  let reducedMotion = reducedMotionMedia.matches;
+  let finePointer = finePointerMedia.matches;
   let offscreenTexture: GPUTexture | null = null;
   let postBindGroup: GPUBindGroup | null = null;
   let sourceIndex = 0;
+  let simulatedCompactness = initialProfile.compactness;
   let lastTime = 0;
+  let visualTime = 0;
   let animationFrame = 0;
   let active = true;
   let checkedFirstFrame = false;
 
+  const updatePointerFromEvent = (event: PointerEvent): void => {
+    pointer.clientX = event.clientX;
+    pointer.clientY = event.clientY;
+    pointer.hasPosition = true;
+    mapPointerToRenderer(canvas, pointer);
+  };
+
   canvas.addEventListener(
+    "pointerenter",
+    (event) => {
+      if (!finePointer) {
+        return;
+      }
+
+      updatePointerFromEvent(event);
+      pointer.hovering = true;
+    },
+    { signal: abortController.signal },
+  );
+  window.addEventListener(
     "pointermove",
     (event) => {
-      const rect = canvas.getBoundingClientRect();
-      pointer.targetX = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
-      pointer.targetY = (1 - (event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1;
-      pointer.strength = Math.min(1, pointer.strength + AURORA_POINTER_CONTROLS.moveStrengthGain);
+      if (!finePointer) {
+        return;
+      }
+
+      if (event.target !== canvas) {
+        pointer.hovering = false;
+        return;
+      }
+
+      updatePointerFromEvent(event);
+      pointer.hovering = true;
     },
     { signal: abortController.signal },
   );
   canvas.addEventListener(
     "pointerleave",
     () => {
-      pointer.targetX = defaultVisualControls.sky.auroraPointerHome[0];
-      pointer.targetY = defaultVisualControls.sky.auroraPointerHome[1];
-      pointer.strength = Math.min(pointer.strength, AURORA_POINTER_CONTROLS.leaveStrengthCap);
+      pointer.hovering = false;
+    },
+    { signal: abortController.signal },
+  );
+  reducedMotionMedia.addEventListener(
+    "change",
+    (event) => {
+      reducedMotion = event.matches;
+      pointer.hovering = pointer.hovering && !reducedMotion;
+    },
+    { signal: abortController.signal },
+  );
+  finePointerMedia.addEventListener(
+    "change",
+    (event) => {
+      finePointer = event.matches;
+      pointer.hovering = pointer.hovering && finePointer;
     },
     { signal: abortController.signal },
   );
@@ -217,7 +294,7 @@ export async function startAuroraRenderer(canvas: HTMLCanvasElement): Promise<Au
 
     offscreenTexture?.destroy();
     offscreenTexture = device.createTexture({
-      label: "flow offscreen texture",
+      label: "aurora offscreen texture",
       size: {
         width: canvas.width,
         height: canvas.height,
@@ -226,23 +303,12 @@ export async function startAuroraRenderer(canvas: HTMLCanvasElement): Promise<Au
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
     postBindGroup = device.createBindGroup({
-      label: "flow post bind group",
+      label: "aurora post bind group",
       layout: postPipeline.getBindGroupLayout(0),
       entries: [
-        {
-          binding: 0,
-          resource: sampler,
-        },
-        {
-          binding: 1,
-          resource: offscreenTexture.createView(),
-        },
-        {
-          binding: 2,
-          resource: {
-            buffer: renderBuffer,
-          },
-        },
+        { binding: 0, resource: sampler },
+        { binding: 1, resource: offscreenTexture.createView() },
+        { binding: 2, resource: { buffer: renderBuffer } },
       ],
     });
   }
@@ -262,62 +328,100 @@ export async function startAuroraRenderer(canvas: HTMLCanvasElement): Promise<Au
     }
 
     const seconds = time * 0.001;
-    const deltaTime = lastTime > 0 ? seconds - lastTime : 1 / 60;
-    const aspect = canvas.width / Math.max(1, canvas.height);
-    const motion = reducedMotion ? AURORA_POINTER_CONTROLS.reducedMotionScale : 1;
-    pointer.x += (pointer.targetX - pointer.x) * AURORA_POINTER_CONTROLS.lerpRate;
-    pointer.y += (pointer.targetY - pointer.y) * AURORA_POINTER_CONTROLS.lerpRate;
-    pointer.strength *= reducedMotion
-      ? AURORA_POINTER_CONTROLS.reducedMotionIdleDecay
-      : AURORA_POINTER_CONTROLS.idleDecay;
-    lastTime = seconds;
+    const deltaTime = Math.min(lastTime > 0 ? seconds - lastTime : 1 / 60, 0.05);
+    const rect = canvas.getBoundingClientRect();
+    const profile = getResponsiveProfile(canvas);
+    const aspect = rect.width / Math.max(1, rect.height);
+    const effectivePixelRatio = canvas.width / Math.max(1, rect.width);
 
+    if (Math.abs(profile.compactness - simulatedCompactness) > 0.08) {
+      const responsiveParticles = createInitialParticles(PARTICLE_COUNT, profile.compactness);
+      device.queue.writeBuffer(particleBuffers[0], 0, responsiveParticles);
+      device.queue.writeBuffer(particleBuffers[1], 0, responsiveParticles);
+      sourceIndex = 0;
+      simulatedCompactness = profile.compactness;
+    }
+
+    const targetStrength =
+      pointer.hovering && pointer.hasPosition && finePointer && !reducedMotion
+        ? 1
+        : AURORA_CONTROLS.reducedMotion.pointerStrength;
+    const responseTimeMs =
+      targetStrength > pointer.strength
+        ? AURORA_CONTROLS.pointer.enterTimeMs
+        : AURORA_CONTROLS.pointer.leaveTimeMs;
+    const strengthResponse = 1 - Math.exp(-deltaTime / Math.max(0.001, responseTimeMs * 0.001));
+
+    pointer.strength = reducedMotion
+      ? AURORA_CONTROLS.reducedMotion.pointerStrength
+      : pointer.strength + (targetStrength - pointer.strength) * strengthResponse;
+    visualTime +=
+      deltaTime * (reducedMotion ? AURORA_CONTROLS.reducedMotion.advectionScale : 1);
+
+    if (pointer.hasPosition) {
+      mapPointerToRenderer(canvas, pointer);
+    }
+
+    lastTime = seconds;
     simUniforms.set([
       deltaTime,
       seconds,
       aspect,
-      motion,
-      pointer.x,
-      pointer.y,
-      pointer.strength,
-      0,
+      reducedMotion ? AURORA_CONTROLS.reducedMotion.advectionScale : 1,
+      profile.compactness,
+      AURORA_CONTROLS.dynamics.primarySpeed,
+      AURORA_CONTROLS.dynamics.secondarySpeed,
+      AURORA_CONTROLS.dynamics.laneRestoration,
+      AURORA_CONTROLS.dynamics.localVariation,
+      AURORA_CONTROLS.composition.primaryWidth,
+      AURORA_CONTROLS.composition.secondaryWidth,
+      AURORA_CONTROLS.population.primaryShare,
     ]);
     renderUniforms.set([
-      seconds,
+      visualTime,
       aspect,
-      1,
-      window.devicePixelRatio || 1,
+      AURORA_CONTROLS.rendering.lineOpacity,
+      effectivePixelRatio,
       canvas.width,
       canvas.height,
-      pointer.x,
-      pointer.y,
+      pointer.rendererX,
+      pointer.rendererY,
       pointer.strength,
-      1,
-      0,
-      0,
+      profile.interactionRadiusCss,
+      profile.compactness,
+      AURORA_CONTROLS.exposure.toneMapExposure,
+      profile.trailPixels,
+      AURORA_CONTROLS.pointer.maxDisplacementCss,
+      AURORA_CONTROLS.pointer.clearing,
+      AURORA_CONTROLS.pointer.edgeGain,
+      AURORA_CONTROLS.composition.primaryWidth,
+      AURORA_CONTROLS.composition.secondaryWidth,
+      profile.revealStart,
+      AURORA_CONTROLS.population.compactVisibleShare,
+      AURORA_CONTROLS.exposure.sceneGain,
+      AURORA_CONTROLS.exposure.glowGain,
+      AURORA_CONTROLS.rendering.spriteOpacity,
+      AURORA_CONTROLS.population.primaryShare,
     ]);
     device.queue.writeBuffer(simBuffer, 0, simUniforms);
     device.queue.writeBuffer(renderBuffer, 0, renderUniforms);
+    diagnostics?.update(pointer, rect, profile, effectivePixelRatio);
 
     const targetIndex = 1 - sourceIndex;
-    const encoder = device.createCommandEncoder({
-      label: "flow frame encoder",
-    });
+    const encoder = device.createCommandEncoder({ label: "aurora frame encoder" });
 
     if (!checkedFirstFrame) {
       device.pushErrorScope("validation");
     }
 
-    const computePass = encoder.beginComputePass({
-      label: "flow compute pass",
-    });
+    const computePass = encoder.beginComputePass({ label: "aurora compute pass" });
     computePass.setPipeline(computePipeline);
     computePass.setBindGroup(0, computeBindGroups[sourceIndex]);
     computePass.dispatchWorkgroups(Math.ceil(PARTICLE_COUNT / WORKGROUP_SIZE));
     computePass.end();
 
     const scenePass = encoder.beginRenderPass({
-      label: "flow scene pass",
+      label: "aurora scene pass",
       colorAttachments: [
         {
           view: offscreenTexture.createView(),
@@ -336,11 +440,11 @@ export async function startAuroraRenderer(canvas: HTMLCanvasElement): Promise<Au
     scenePass.end();
 
     const postPass = encoder.beginRenderPass({
-      label: "flow post pass",
+      label: "aurora post pass",
       colorAttachments: [
         {
           view: gpuContext.getCurrentTexture().createView(),
-          clearValue: { r: 0, g: 0, b: 0, a: 0 },
+          clearValue: { r: 0, g: 0, b: 0, a: 1 },
           loadOp: "clear",
           storeOp: "store",
         },
@@ -357,7 +461,7 @@ export async function startAuroraRenderer(canvas: HTMLCanvasElement): Promise<Au
       checkedFirstFrame = true;
       void device.popErrorScope().then((frameError) => {
         if (frameError) {
-          console.error(`Flow WebGPU frame failed: ${frameError.message}`);
+          console.error(`Aurora WebGPU frame failed: ${frameError.message}`);
         }
       });
     }
@@ -382,6 +486,7 @@ export async function startAuroraRenderer(canvas: HTMLCanvasElement): Promise<Au
 
       active = false;
       abortController.abort();
+      diagnostics?.destroy();
 
       if (animationFrame !== 0) {
         cancelAnimationFrame(animationFrame);
@@ -416,27 +521,12 @@ function createComputeBindGroup(
   uniforms: GPUBuffer,
 ): GPUBindGroup {
   return device.createBindGroup({
-    label: "flow compute bind group",
+    label: "aurora compute bind group",
     layout: pipeline.getBindGroupLayout(0),
     entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: source,
-        },
-      },
-      {
-        binding: 1,
-        resource: {
-          buffer: target,
-        },
-      },
-      {
-        binding: 2,
-        resource: {
-          buffer: uniforms,
-        },
-      },
+      { binding: 0, resource: { buffer: source } },
+      { binding: 1, resource: { buffer: target } },
+      { binding: 2, resource: { buffer: uniforms } },
     ],
   });
 }
@@ -448,21 +538,11 @@ function createRenderBindGroup(
   uniforms: GPUBuffer,
 ): GPUBindGroup {
   return device.createBindGroup({
-    label: "flow render bind group",
+    label: "aurora render bind group",
     layout: pipeline.getBindGroupLayout(0),
     entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: particles,
-        },
-      },
-      {
-        binding: 1,
-        resource: {
-          buffer: uniforms,
-        },
-      },
+      { binding: 0, resource: { buffer: particles } },
+      { binding: 1, resource: { buffer: uniforms } },
     ],
   });
 }
@@ -491,7 +571,7 @@ function createParticlePipeline(
           blend: {
             color: {
               srcFactor: "src-alpha",
-              dstFactor: "one",
+              dstFactor: "one-minus-src-alpha",
               operation: "add",
             },
             alpha: {
@@ -503,29 +583,39 @@ function createParticlePipeline(
         },
       ],
     },
-    primitive: {
-      topology: "triangle-list",
-    },
+    primitive: { topology: "triangle-list" },
   });
 }
 
-function createInitialParticles(count: number): Float32Array {
+function createInitialParticles(count: number, compactness: number): Float32Array {
   const particles = new Float32Array(count * FLOATS_PER_PARTICLE);
 
   for (let index = 0; index < count; index += 1) {
     const seed = index * 0.61803398875 + 0.123;
     const offset = index * FLOATS_PER_PARTICLE;
     const depth = hash(seed * 7.41);
-    const lifetime = lerp(10, 20, hash(seed * 3.91));
+    const lane = lerp(-1, 1, hash(seed * 13.3));
+    const x = lerp(-1.28, 1.24, hash(seed));
+    const secondary = hash(seed * 5.19) >= AURORA_CONTROLS.population.primaryShare;
+    const width = secondary
+      ? AURORA_CONTROLS.composition.secondaryWidth
+      : AURORA_CONTROLS.composition.primaryWidth;
+    const y =
+      (secondary ? secondaryCenter(x, compactness) : primaryCenter(x, compactness)) +
+      lane * width * (0.28 + depth * 0.72);
+    const speed = secondary
+      ? AURORA_CONTROLS.dynamics.secondarySpeed
+      : AURORA_CONTROLS.dynamics.primarySpeed;
+    const lifetime = lerp(24, 44, hash(seed * 3.91));
 
-    particles[offset] = lerp(-0.92, 1.46, hash(seed));
-    particles[offset + 1] = lerp(-1.12, 1.1, hash(seed * 2.31));
-    particles[offset + 2] = lerp(0.04, 0.18, hash(seed * 3.73));
-    particles[offset + 3] = lerp(-0.11, 0.12, hash(seed * 5.19));
+    particles[offset] = x;
+    particles[offset + 1] = y;
+    particles[offset + 2] = speed;
+    particles[offset + 3] = 0;
     particles[offset + 4] = seed;
     particles[offset + 5] = depth;
     particles[offset + 6] = hash(seed * 11.7) * lifetime;
-    particles[offset + 7] = lerp(-1, 1, hash(seed * 13.3));
+    particles[offset + 7] = lane;
   }
 
   return particles;
@@ -548,12 +638,145 @@ function resizeCanvas(canvas: HTMLCanvasElement): boolean {
   return true;
 }
 
+function getResponsiveProfile(canvas: HTMLCanvasElement): ResponsiveProfile {
+  const width = Math.max(1, canvas.clientWidth);
+  const height = Math.max(1, canvas.clientHeight);
+  const aspect = width / height;
+  const widthPressure = clamp(
+    (AURORA_CONTROLS.responsive.compactMaxWidth + 280 - width) / 280,
+    0,
+    1,
+  );
+  const aspectPressure = clamp(
+    (AURORA_CONTROLS.responsive.compactAspect + 0.24 - aspect) / 0.24,
+    0,
+    1,
+  );
+  const compactness = Math.max(widthPressure, aspectPressure);
+
+  return {
+    compactness,
+    interactionRadiusCss: lerp(
+      AURORA_CONTROLS.pointer.desktopRadiusCss,
+      AURORA_CONTROLS.pointer.compactRadiusCss,
+      compactness,
+    ),
+    revealStart: lerp(
+      AURORA_CONTROLS.composition.desktopRevealStart,
+      AURORA_CONTROLS.composition.compactRevealStart,
+      compactness,
+    ),
+    trailPixels: lerp(
+      AURORA_CONTROLS.rendering.desktopTrailPixels,
+      AURORA_CONTROLS.rendering.compactTrailPixels,
+      compactness,
+    ),
+  };
+}
+
+// Pointer coordinate contract:
+// client CSS pixels -> canvas-local CSS pixels -> canvas backing-store pixels
+// -> WebGPU clip/NDC coordinates. The canvas framebuffer is top-down, so -1 is
+// the top edge and +1 is the bottom edge in the particle stage. The force
+// center is never interpolated.
+function mapPointerToRenderer(canvas: HTMLCanvasElement, pointer: PointerState): void {
+  const rect = canvas.getBoundingClientRect();
+  const localCssX = clamp(pointer.clientX - rect.left, 0, rect.width);
+  const localCssY = clamp(pointer.clientY - rect.top, 0, rect.height);
+  const backingX = localCssX * (canvas.width / Math.max(1, rect.width));
+  const backingY = localCssY * (canvas.height / Math.max(1, rect.height));
+
+  pointer.localCssX = localCssX;
+  pointer.localCssY = localCssY;
+  pointer.backingX = backingX;
+  pointer.backingY = backingY;
+  pointer.rendererX = (backingX / Math.max(1, canvas.width)) * 2 - 1;
+  pointer.rendererY = (backingY / Math.max(1, canvas.height)) * 2 - 1;
+}
+
+function createPointerDiagnostics(canvas: HTMLCanvasElement): PointerDiagnostics | null {
+  const debugMode = new URLSearchParams(window.location.search).get("debug");
+
+  if (!import.meta.env.DEV || debugMode !== "pointer") {
+    return null;
+  }
+
+  const root = document.createElement("div");
+  const radius = document.createElement("div");
+  const rawCenter = document.createElement("div");
+  const effectiveCenter = document.createElement("div");
+  const panel = document.createElement("pre");
+
+  root.className = "aurora-pointer-debug is-inactive";
+  radius.className = "aurora-pointer-debug__radius";
+  rawCenter.className = "aurora-pointer-debug__center aurora-pointer-debug__center--raw";
+  effectiveCenter.className =
+    "aurora-pointer-debug__center aurora-pointer-debug__center--effective";
+  panel.className = "aurora-pointer-debug__panel";
+  root.append(radius, rawCenter, effectiveCenter, panel);
+  (canvas.closest(".study-page") ?? document.body).append(root);
+
+  return {
+    destroy: () => root.remove(),
+    update: (pointer, rect, profile, effectivePixelRatio) => {
+      const mappedClientX = rect.left + ((pointer.rendererX + 1) * 0.5) * rect.width;
+      const mappedClientY = rect.top + ((pointer.rendererY + 1) * 0.5) * rect.height;
+      const drift = Math.hypot(mappedClientX - pointer.clientX, mappedClientY - pointer.clientY);
+      const diameter = profile.interactionRadiusCss * 2;
+
+      root.classList.toggle("is-inactive", !pointer.hasPosition);
+      radius.style.width = `${diameter}px`;
+      radius.style.height = `${diameter}px`;
+      radius.style.transform = `translate(${mappedClientX - profile.interactionRadiusCss}px, ${mappedClientY - profile.interactionRadiusCss}px)`;
+      rawCenter.style.transform = `translate(${pointer.clientX}px, ${pointer.clientY}px)`;
+      effectiveCenter.style.transform = `translate(${mappedClientX}px, ${mappedClientY}px)`;
+      panel.textContent = [
+        `raw client css  ${pointer.clientX.toFixed(2)}, ${pointer.clientY.toFixed(2)}`,
+        `canvas local    ${pointer.localCssX.toFixed(2)}, ${pointer.localCssY.toFixed(2)}`,
+        `backing store   ${pointer.backingX.toFixed(2)}, ${pointer.backingY.toFixed(2)}`,
+        `renderer ndc    ${pointer.rendererX.toFixed(4)}, ${pointer.rendererY.toFixed(4)}`,
+        `effective css   ${mappedClientX.toFixed(2)}, ${mappedClientY.toFixed(2)}`,
+        `mapping drift   ${drift.toFixed(3)} css px`,
+        `radius          ${profile.interactionRadiusCss.toFixed(1)} css px`,
+        `strength        ${pointer.strength.toFixed(3)}`,
+        `canvas bounds   ${rect.left.toFixed(1)}, ${rect.top.toFixed(1)} / ${rect.width.toFixed(1)} x ${rect.height.toFixed(1)}`,
+        `dpr             ${(window.devicePixelRatio || 1).toFixed(2)} (effective ${effectivePixelRatio.toFixed(2)})`,
+      ].join("\n");
+    },
+  };
+}
+
+function primaryCenter(x: number, compactness: number): number {
+  const desktop =
+    0.42 - smoothstep(-0.52, 0.92, x) * 0.36 + Math.sin((x + 0.35) * 2.1) * 0.1;
+  const compact =
+    0.48 - smoothstep(-0.85, 0.9, x) * 0.2 + Math.sin((x + 0.2) * 2.1) * 0.06;
+  return lerp(desktop, compact, compactness);
+}
+
+function secondaryCenter(x: number, compactness: number): number {
+  return (
+    primaryCenter(x, compactness) +
+    lerp(-0.32, -0.28, compactness) +
+    Math.sin(x * 1.6 + 1.2) * 0.025
+  );
+}
+
+function smoothstep(edge0: number, edge1: number, value: number): number {
+  const amount = clamp((value - edge0) / (edge1 - edge0), 0, 1);
+  return amount * amount * (3 - 2 * amount);
+}
+
 function hash(value: number): number {
   return fract(Math.sin(value * 127.1) * 43758.5453123);
 }
 
 function fract(value: number): number {
   return value - Math.floor(value);
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
 }
 
 function lerp(start: number, end: number, amount: number): number {

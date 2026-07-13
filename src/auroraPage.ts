@@ -12,9 +12,9 @@ export function mountAuroraPage(root: HTMLDivElement): PageHandle {
     canvasLabel: "Aurora WebGPU particle curtains study",
     titleId: "aurora-title",
     kicker: "WebGPU study 01 / aurora curtains",
-    title: "Aurora particle curtains over soft attractors.",
+    title: "An authored aurora river with a calm magnetic lens.",
     description:
-      "A dense field of routed particles drifting through layered curtains, lens-like attractors, and reactive wake lines.",
+      "One luminous primary flow, a distant supporting curtain, and sparse atmosphere composed around deliberate negative space.",
     actions: [
       { href: "/hero-flow", label: "Open hero flow", variant: "primary" },
       { href: "/flow-sheet", label: "View flow sheet", variant: "secondary" },

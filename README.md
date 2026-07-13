@@ -21,7 +21,9 @@ Open the local Vite URL in a WebGPU-capable browser.
 
 - `/` and `/hero-flow` open the monochrome ink hero composition.
 - `/hero-flow-dark` keeps the luminous particle field as a dedicated dark hero study.
-- `/aurora` keeps the older aurora particle field (sine-flow + lens attractors + restrained curtains) as a separate study.
+- `/aurora` composes one primary aurora river, a distant supporting curtain, sparse atmosphere, and an exact local magnetic-lens hover.
 - `/topography` adds a grayscale terrain study with procedural contour layers, metallic lighting, fog, and a post-process lens pass.
 - `/flow-sheet` folds layered graphite trajectories through a dimensional throat with quiet drift and pointer parallax.
 - `/refractive-nebula` adds a compact volumetric nebula with refractive micro-normals, star glints, and a quality selector that changes render scale plus shader detail.
+
+During local development, `/aurora?debug=pointer` displays the CSS-to-backing-store-to-renderer coordinate mapping, interaction radius, strength, canvas bounds, DPR, and mapping drift.
