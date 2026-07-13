@@ -27,6 +27,7 @@ body {
 }
 
 body.hero-flow-page-body,
+body.hero-flow-dark-page-body,
 body.aurora-page-body,
 body.refractive-nebula-page-body {
   color-scheme: dark;
@@ -40,6 +41,7 @@ body.flow-sheet-page-body {
 }
 
 body.hero-flow-page-body .lab-header,
+body.hero-flow-dark-page-body .lab-header,
 body.aurora-page-body .lab-header,
 body.refractive-nebula-page-body .lab-header {
   --lab-surface: rgba(4, 7, 10, 0.74);
@@ -357,101 +359,6 @@ body.hero-flow-page-body.hero-flow-page-body--light .lab-header {
   border-color: currentColor;
 }
 
-.flow-theme-toggle {
-  position: fixed;
-  z-index: 6;
-  bottom: 1rem;
-  left: 1rem;
-  display: inline-flex;
-  width: 6.85rem;
-  min-height: 2.45rem;
-  align-items: center;
-  justify-content: center;
-  gap: 0.52rem;
-  padding: 0.35rem 0.62rem;
-  border: 1px solid rgba(137, 255, 193, 0.2);
-  border-radius: 999px;
-  color: #f5fff6;
-  background: rgba(2, 5, 8, 0.72);
-  box-shadow: 0 0.7rem 2rem rgba(0, 0, 0, 0.22);
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 720;
-  letter-spacing: 0;
-  backdrop-filter: blur(14px);
-}
-
-.flow-theme-toggle:hover,
-.flow-theme-toggle:focus-visible {
-  border-color: rgba(137, 255, 193, 0.46);
-  background: rgba(6, 12, 16, 0.84);
-}
-
-.flow-theme-toggle:focus-visible {
-  outline: 2px solid rgba(137, 255, 193, 0.74);
-  outline-offset: 3px;
-}
-
-.flow-theme-toggle__track {
-  position: relative;
-  flex: 0 0 auto;
-  width: 2rem;
-  height: 1.05rem;
-  border: 1px solid rgba(245, 255, 246, 0.22);
-  border-radius: 999px;
-  background: rgba(245, 255, 246, 0.12);
-}
-
-.flow-theme-toggle__thumb {
-  position: absolute;
-  top: 0.15rem;
-  left: 0.16rem;
-  width: 0.66rem;
-  height: 0.66rem;
-  border-radius: 50%;
-  background: #89ffc1;
-  box-shadow: 0 0 0.9rem rgba(137, 255, 193, 0.58);
-  transition:
-    transform 180ms ease,
-    background 180ms ease,
-    box-shadow 180ms ease;
-}
-
-.flow-theme-toggle__label {
-  display: inline-block;
-  min-width: 2.2rem;
-  text-align: left;
-}
-
-.flow-theme-toggle.is-light {
-  border-color: rgba(28, 29, 31, 0.18);
-  color: #262729;
-  background: rgba(248, 248, 246, 0.78);
-  box-shadow: 0 0.7rem 2rem rgba(20, 20, 20, 0.12);
-}
-
-.flow-theme-toggle.is-light:hover,
-.flow-theme-toggle.is-light:focus-visible {
-  border-color: rgba(28, 29, 31, 0.38);
-  background: rgba(255, 255, 253, 0.92);
-}
-
-.flow-theme-toggle.is-light:focus-visible {
-  outline-color: rgba(28, 29, 31, 0.58);
-}
-
-.flow-theme-toggle.is-light .flow-theme-toggle__track {
-  border-color: rgba(28, 29, 31, 0.16);
-  background: rgba(28, 29, 31, 0.1);
-}
-
-.flow-theme-toggle.is-light .flow-theme-toggle__thumb {
-  background: #454648;
-  box-shadow: 0 0 0.55rem rgba(28, 29, 31, 0.22);
-  transform: translateX(0.9rem);
-}
-
 .refractive-nebula-quality {
   position: fixed;
   right: 1.2rem;
@@ -549,11 +456,6 @@ body.hero-flow-page-body.hero-flow-page-body--light .lab-header {
 
   .refractive-nebula-quality select {
     width: 100%;
-  }
-
-  .flow-theme-toggle {
-    bottom: 0.9rem;
-    left: 0.9rem;
   }
 }
 

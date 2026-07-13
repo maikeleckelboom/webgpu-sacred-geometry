@@ -1,18 +1,12 @@
 import { setPageBodyClass } from "./bodyClasses";
-import { startFlowFieldRenderer, type FlowTheme } from "./flowRenderer";
 import { startInkFlowRenderer } from "./inkFlowRenderer";
 import { connectStudyRenderer, mountStudyFrame, type PageHandle } from "./studyFrame";
 
-const HERO_FLOW_THEME_STORAGE_KEY = "hero-flow-theme";
-
-// Portfolio hero prototype: the dark theme runs the existing aurora flow
-// field untouched, while the light theme swaps in the monochrome ink
-// renderer (graphite streamlines on paper). Each toggle tears
-// down the active renderer and boots the other one on a fresh canvas.
+// Portfolio hero prototype: graphite streamlines on paper. The luminous
+// dark treatment lives on its own route so each page has one renderer and
+// one stable surface contract.
 export function mountHeroFlowPage(root: HTMLDivElement): PageHandle {
   setPageBodyClass("hero-flow-page-body");
-  let currentTheme = getInitialHeroFlowTheme();
-  let rendererHandle: PageHandle | null = null;
 
   const { canvas, status } = mountStudyFrame(root, {
     route: "hero-flow",
@@ -25,7 +19,7 @@ export function mountHeroFlowPage(root: HTMLDivElement): PageHandle {
     description:
       "A luminous field of routed particles, drifting curtains, and reactive wake lines moving through soft attractors.",
     actions: [
-      { href: "/topography", label: "Open topography", variant: "primary" },
+      { href: "/hero-flow-dark", label: "Open dark hero", variant: "primary" },
       { href: "/flow-sheet", label: "View flow sheet", variant: "secondary" },
     ],
   });
@@ -36,101 +30,15 @@ export function mountHeroFlowPage(root: HTMLDivElement): PageHandle {
     throw new Error("The hero flow study page could not be mounted.");
   }
 
-  let currentCanvas = canvas;
-
-  const startRendererForTheme = (theme: FlowTheme): void => {
-    rendererHandle?.destroy();
-    rendererHandle = null;
-
-    // A fresh canvas per renderer keeps the two WebGPU contexts from
-    // fighting over the same surface configuration.
-    const freshCanvas = currentCanvas.cloneNode(false) as HTMLCanvasElement;
-    freshCanvas.hidden = false;
-    currentCanvas.replaceWith(freshCanvas);
-    currentCanvas = freshCanvas;
-    status.hidden = true;
-
-    rendererHandle = connectStudyRenderer(freshCanvas, status, (targetCanvas) =>
-      theme === "dark" ? startFlowFieldRenderer(targetCanvas, "dark") : startInkFlowRenderer(targetCanvas),
-    );
-  };
-
-  const themeToggle = createHeroFlowThemeToggle();
-  page.append(themeToggle);
-
-  const applyTheme = (theme: FlowTheme, restartRenderer: boolean): void => {
-    currentTheme = theme;
-    page.classList.toggle("is-flow-light", theme === "light");
-    document.body.classList.toggle("hero-flow-page-body--light", theme === "light");
-    currentCanvas.dataset.flowTheme = theme;
-    updateHeroFlowThemeToggle(themeToggle, theme);
-    persistHeroFlowTheme(theme);
-
-    if (restartRenderer) {
-      startRendererForTheme(theme);
-    }
-  };
-
-  const handleToggleClick = (): void => {
-    applyTheme(currentTheme === "light" ? "dark" : "light", true);
-  };
-
-  themeToggle.addEventListener("click", handleToggleClick);
-  applyTheme(currentTheme, false);
-  startRendererForTheme(currentTheme);
+  page.classList.add("is-flow-light");
+  document.body.classList.add("hero-flow-page-body--light");
+  canvas.dataset.flowTheme = "light";
+  const rendererHandle = connectStudyRenderer(canvas, status, startInkFlowRenderer);
 
   return {
     destroy: () => {
-      themeToggle.removeEventListener("click", handleToggleClick);
       document.body.classList.remove("hero-flow-page-body--light");
-      rendererHandle?.destroy();
-      rendererHandle = null;
+      rendererHandle.destroy();
     },
   };
-}
-
-function createHeroFlowThemeToggle(): HTMLButtonElement {
-  const button = document.createElement("button");
-  button.className = "flow-theme-toggle";
-  button.type = "button";
-  button.innerHTML = `
-    <span class="flow-theme-toggle__track" aria-hidden="true">
-      <span class="flow-theme-toggle__thumb"></span>
-    </span>
-    <span class="flow-theme-toggle__label"></span>
-  `;
-  return button;
-}
-
-function updateHeroFlowThemeToggle(button: HTMLButtonElement, theme: FlowTheme): void {
-  const label = button.querySelector<HTMLSpanElement>(".flow-theme-toggle__label");
-  const isLight = theme === "light";
-
-  button.classList.toggle("is-light", isLight);
-  button.setAttribute("aria-pressed", String(isLight));
-  button.setAttribute(
-    "aria-label",
-    isLight ? "Switch hero flow to dark theme" : "Switch hero flow to light theme",
-  );
-
-  if (label) {
-    label.textContent = isLight ? "Light" : "Dark";
-  }
-}
-
-function getInitialHeroFlowTheme(): FlowTheme {
-  try {
-    const storedTheme = window.localStorage.getItem(HERO_FLOW_THEME_STORAGE_KEY);
-    return storedTheme === "dark" ? "dark" : "light";
-  } catch {
-    return "light";
-  }
-}
-
-function persistHeroFlowTheme(theme: FlowTheme): void {
-  try {
-    window.localStorage.setItem(HERO_FLOW_THEME_STORAGE_KEY, theme);
-  } catch {
-    // Storage can be disabled; the toggle should still work for this page view.
-  }
 }

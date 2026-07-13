@@ -19,7 +19,8 @@ Open the local Vite URL in a WebGPU-capable browser.
 
 ## Pages
 
-- `/` and `/hero-flow` open the hero composition, where a theme toggle switches between the luminous particle field and the monochrome ink renderer.
+- `/` and `/hero-flow` open the monochrome ink hero composition.
+- `/hero-flow-dark` keeps the luminous particle field as a dedicated dark hero study.
 - `/aurora` keeps the older aurora particle field (sine-flow + lens attractors + restrained curtains) as a separate study.
 - `/topography` adds a grayscale terrain study with procedural contour layers, metallic lighting, fog, and a post-process lens pass.
 - `/flow-sheet` folds layered graphite trajectories through a dimensional throat with quiet drift and pointer parallax.

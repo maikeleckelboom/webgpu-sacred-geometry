@@ -2,6 +2,7 @@ const pageBodyClasses = [
   "flow-sheet-page-body",
   "hero-flow-page-body",
   "hero-flow-page-body--light",
+  "hero-flow-dark-page-body",
   "aurora-page-body",
   "topography-page-body",
   "refractive-nebula-page-body",
