@@ -19,9 +19,8 @@ Open the local Vite URL in a WebGPU-capable browser.
 
 ## Pages
 
-- `/` and `/flow-field` open the flow-field study.
-- `/flow-field` drives a high-key editorial composition from a single mathematical vector field: curl noise, three moving vortex attractors, an aurora shear curtain, a hidden golden-angle attractor lattice, field-metric-driven particle styling, and an accumulation buffer trail memory.
-- `/aurora` keeps the older aurora particle field (sine-flow + lens attractors + curtains) as a separate study.
+- `/` and `/hero-flow` open the hero composition, where a theme toggle switches between the luminous particle field and the monochrome ink renderer.
+- `/aurora` keeps the older aurora particle field (sine-flow + lens attractors + restrained curtains) as a separate study.
 - `/topography` adds a grayscale terrain study with procedural contour layers, metallic lighting, fog, and a post-process lens pass.
 - `/flow-sheet` folds layered graphite trajectories through a dimensional throat with quiet drift and pointer parallax.
-- `/living-glass` adds a compact volumetric nebula with refractive glass normals, star glints, and a quality selector that changes render scale plus shader detail.
+- `/refractive-nebula` adds a compact volumetric nebula with refractive micro-normals, star glints, and a quality selector that changes render scale plus shader detail.

@@ -16,7 +16,7 @@ export function mountFlowSheetPage(root: HTMLDivElement): PageHandle {
     description:
       "Layered trajectories converge through a quiet throat, then open into a shifting graphite surface with depth-aware parallax.",
     actions: [
-      { href: "/flow-field", label: "Open flow field", variant: "primary" },
+      { href: "/hero-flow", label: "Open hero flow", variant: "primary" },
       { href: "/topography", label: "View topography", variant: "secondary" },
     ],
   });

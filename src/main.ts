@@ -1,10 +1,9 @@
 import "./style.css";
 import { mountAuroraPage } from "./auroraPage";
-import { mountFlowFieldPage } from "./flowPage";
 import { mountFlowSheetPage } from "./flowSheetPage";
 import { mountHeroFlowPage } from "./heroFlowPage";
-import { mountLivingGlassPage } from "./livingGlassPage";
 import { createLabHeader, setLabHeaderActive, type LabRoute } from "./navigation";
+import { mountRefractiveNebulaPage } from "./refractiveNebulaPage";
 import { mountTopographyPage } from "./topographyPage";
 import type { PageHandle } from "./studyFrame";
 
@@ -20,16 +19,21 @@ if (!app) {
 }
 
 const appRoot = app;
+const routeRedirects: Readonly<Record<string, string>> = {
+  "/flow-field": "/hero-flow",
+  "/living-glass": "/refractive-nebula",
+};
 
 const pageRoutes: Record<string, PageRoute> = {
-  "/": { mount: mountFlowFieldPage, route: "flow-field" },
-  "/flow-field": { mount: mountFlowFieldPage, route: "flow-field" },
+  "/": { mount: mountHeroFlowPage, route: "hero-flow" },
   "/flow-sheet": { mount: mountFlowSheetPage, route: "flow-sheet" },
   "/hero-flow": { mount: mountHeroFlowPage, route: "hero-flow" },
   "/aurora": { mount: mountAuroraPage, route: "aurora" },
   "/topography": { mount: mountTopographyPage, route: "topography" },
-  "/living-glass": { mount: mountLivingGlassPage, route: "living-glass" },
+  "/refractive-nebula": { mount: mountRefractiveNebulaPage, route: "refractive-nebula" },
 };
+
+redirectRetiredRoute();
 
 const initialPageRoute = getPageRoute(normalizePathname(window.location.pathname));
 appRoot.innerHTML = `
@@ -152,4 +156,15 @@ function isKnownRoute(pathname: string): boolean {
 
 function getPageRoute(pathname: string): PageRoute {
   return pageRoutes[pathname] ?? pageRoutes["/"];
+}
+
+function redirectRetiredRoute(): void {
+  const pathname = normalizePathname(window.location.pathname);
+  const destination = routeRedirects[pathname];
+
+  if (!destination) {
+    return;
+  }
+
+  history.replaceState(null, "", `${destination}${window.location.search}${window.location.hash}`);
 }

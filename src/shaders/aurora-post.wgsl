@@ -206,15 +206,14 @@ fn fragmentMain(input: VertexOut) -> @location(0) vec4f {
 
   let high = curtain(input.uv, render.time, 1.7, 0.7, 0.15);
   let middle = curtain(input.uv, render.time, 4.6, 0.5, 0.12);
-  let low = curtain(input.uv, render.time, 7.9, 0.33, 0.096);
+  let low = curtain(input.uv, render.time, 7.9, 0.27, 0.068);
   let aurora =
     vec3f(0.12, 0.9, 0.45) * high +
     vec3f(0.06, 0.64, 0.96) * middle +
-    vec3f(0.76, 0.24, 0.92) * low;
+    vec3f(0.56, 0.16, 0.72) * low * 0.34;
   let pointerGlow = 1.0 - smoothstep(0.0, 0.55, distance(input.uv * 2.0 - vec2f(1.0, 1.0), render.pointer));
   let sceneLight = center.rgb * 0.76 + bloom * vec3f(0.72, 1.02, 0.86);
   let color = skyColor(input.uv, render.time) + aurora * 1.72 + sceneLight + vec3f(0.12, 0.82, 0.54) * pointerGlow * render.pointerStrength * 0.2;
   let toneMapped = vec3f(1.0) - exp(-color * vec3f(1.02, 0.9, 0.98));
   return vec4f(toneMapped, 1.0);
 }
-

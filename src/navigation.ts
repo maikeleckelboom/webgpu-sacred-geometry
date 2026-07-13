@@ -1,18 +1,20 @@
 export type LabRoute =
-  | "flow-field"
-  | "flow-sheet"
   | "hero-flow"
+  | "flow-sheet"
   | "aurora"
   | "topography"
-  | "living-glass";
+  | "refractive-nebula";
 
 const navItems: Array<{ route: LabRoute; href: string; label: string }> = [
-  { route: "flow-field", href: "/flow-field", label: "Flow field" },
-  { route: "flow-sheet", href: "/flow-sheet", label: "Flow sheet" },
   { route: "hero-flow", href: "/hero-flow", label: "Hero flow" },
+  { route: "flow-sheet", href: "/flow-sheet", label: "Flow sheet" },
   { route: "aurora", href: "/aurora", label: "Aurora" },
   { route: "topography", href: "/topography", label: "Topography" },
-  { route: "living-glass", href: "/living-glass", label: "Living glass" },
+  {
+    route: "refractive-nebula",
+    href: "/refractive-nebula",
+    label: "Refractive nebula",
+  },
 ];
 
 export function createLabHeader(activeRoute: LabRoute): string {

@@ -26,10 +26,9 @@ body {
   background: #f8f8f5;
 }
 
-body.flow-page-body,
 body.hero-flow-page-body,
 body.aurora-page-body,
-body.living-glass-page-body {
+body.refractive-nebula-page-body {
   color-scheme: dark;
   background: #020305;
 }
@@ -40,28 +39,14 @@ body.flow-sheet-page-body {
   background: #fafaf8;
 }
 
-body.flow-page-body .lab-header,
 body.hero-flow-page-body .lab-header,
 body.aurora-page-body .lab-header,
-body.living-glass-page-body .lab-header {
+body.refractive-nebula-page-body .lab-header {
   --lab-surface: rgba(4, 7, 10, 0.74);
   --lab-text: #f5fff6;
   --lab-muted: rgba(218, 241, 230, 0.68);
   --lab-border: rgba(129, 255, 193, 0.18);
   --lab-active: #89ffc1;
-}
-
-body.flow-page-body.flow-page-body--light {
-  color-scheme: light;
-  background: #eef3ef;
-}
-
-body.flow-page-body.flow-page-body--light .lab-header {
-  --lab-surface: rgba(238, 243, 239, 0.88);
-  --lab-text: #06343a;
-  --lab-muted: rgba(6, 52, 58, 0.62);
-  --lab-border: rgba(15, 77, 82, 0.14);
-  --lab-active: #0b6872;
 }
 
 body.hero-flow-page-body.hero-flow-page-body--light {
@@ -223,20 +208,12 @@ body.hero-flow-page-body.hero-flow-page-body--light .lab-header {
   display: none;
 }
 
-.study-page--flow,
 .study-page--aurora,
-.study-page--living-glass {
+.study-page--refractive-nebula {
   --study-bg: #020305;
   --study-text: #f5fff6;
   --study-status-bg: rgba(2, 5, 8, 0.92);
   --study-status-border: rgba(120, 255, 196, 0.32);
-}
-
-.study-page--flow.is-flow-light {
-  --study-bg: #eef3ef;
-  --study-text: #06343a;
-  --study-status-bg: rgba(248, 251, 247, 0.92);
-  --study-status-border: rgba(15, 77, 82, 0.18);
 }
 
 .study-page--hero-flow {
@@ -266,9 +243,8 @@ body.hero-flow-page-body.hero-flow-page-body--light .lab-header {
   --study-status-border: rgba(36, 37, 41, 0.16);
 }
 
-.flow-canvas,
 .aurora-canvas,
-.living-glass-canvas {
+.refractive-nebula-canvas {
   background: #020305;
 }
 
@@ -280,10 +256,6 @@ body.hero-flow-page-body.hero-flow-page-body--light .lab-header {
   background: #fafaf8;
   cursor: crosshair;
   touch-action: none;
-}
-
-.study-page--flow.is-flow-light .flow-canvas {
-  background: #eef3ef;
 }
 
 .hero-flow-canvas {
@@ -480,7 +452,7 @@ body.hero-flow-page-body.hero-flow-page-body--light .lab-header {
   transform: translateX(0.9rem);
 }
 
-.living-glass-quality {
+.refractive-nebula-quality {
   position: fixed;
   right: 1.2rem;
   bottom: 1.2rem;
@@ -498,7 +470,7 @@ body.hero-flow-page-body.hero-flow-page-body--light .lab-header {
   box-shadow: 0 1rem 2.4rem rgba(0, 0, 0, 0.24);
 }
 
-.living-glass-quality label {
+.refractive-nebula-quality label {
   color: rgba(228, 242, 255, 0.72);
   font-size: 0.78rem;
   font-weight: 720;
@@ -506,7 +478,7 @@ body.hero-flow-page-body.hero-flow-page-body--light .lab-header {
   text-transform: uppercase;
 }
 
-.living-glass-quality select {
+.refractive-nebula-quality select {
   min-width: 8rem;
   padding: 0.44rem 0.52rem;
   border: 1px solid rgba(228, 242, 255, 0.18);
@@ -516,7 +488,7 @@ body.hero-flow-page-body.hero-flow-page-body--light .lab-header {
   font: inherit;
 }
 
-.living-glass-quality span {
+.refractive-nebula-quality span {
   grid-column: 1 / -1;
   color: rgba(228, 242, 255, 0.62);
   font-size: 0.78rem;
@@ -567,7 +539,7 @@ body.hero-flow-page-body.hero-flow-page-body--light .lab-header {
     min-height: max(100svh, 43rem);
   }
 
-  .living-glass-quality {
+  .refractive-nebula-quality {
     right: 1rem;
     bottom: 1rem;
     left: 1rem;
@@ -575,7 +547,7 @@ body.hero-flow-page-body.hero-flow-page-body--light .lab-header {
     grid-template-columns: 1fr;
   }
 
-  .living-glass-quality select {
+  .refractive-nebula-quality select {
     width: 100%;
   }
 

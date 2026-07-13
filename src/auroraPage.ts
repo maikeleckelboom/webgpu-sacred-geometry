@@ -14,9 +14,9 @@ export function mountAuroraPage(root: HTMLDivElement): PageHandle {
     kicker: "WebGPU study 01 / aurora curtains",
     title: "Aurora particle curtains over soft attractors.",
     description:
-      "A dense field of routed particles drifting through drifting curtains, lens-like attractors, and reactive wake lines.",
+      "A dense field of routed particles drifting through layered curtains, lens-like attractors, and reactive wake lines.",
     actions: [
-      { href: "/flow-field", label: "Open flow field", variant: "primary" },
+      { href: "/hero-flow", label: "Open hero flow", variant: "primary" },
       { href: "/flow-sheet", label: "View flow sheet", variant: "secondary" },
     ],
   });

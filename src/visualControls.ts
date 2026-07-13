@@ -26,7 +26,7 @@ export interface VisualControls {
   };
   sky: {
     auroraPointerHome: Vec2Control;
-    livingGlass: {
+    refractiveNebula: {
       defaultOptions: {
         quality: "low" | "medium" | "high" | "ultra";
         intensity: number;
@@ -34,10 +34,10 @@ export interface VisualControls {
         seed: number;
       };
       qualitySettings: {
-        low: LivingGlassQualityControl;
-        medium: LivingGlassQualityControl;
-        high: LivingGlassQualityControl;
-        ultra: LivingGlassQualityControl;
+        low: RefractiveNebulaQualityControl;
+        medium: RefractiveNebulaQualityControl;
+        high: RefractiveNebulaQualityControl;
+        ultra: RefractiveNebulaQualityControl;
       };
     };
   };
@@ -94,7 +94,7 @@ export interface VisualControls {
       aurora: number;
       topography: number;
       flowSheet: number;
-      livingGlass: number;
+      refractiveNebula: number;
     };
     sampleCount: {
       topography: number;
@@ -114,7 +114,7 @@ export interface VisualControls {
   };
 }
 
-interface LivingGlassQualityControl {
+interface RefractiveNebulaQualityControl {
   label: string;
   shaderQuality: 0 | 1 | 2 | 3;
   resolutionScale: number;
@@ -137,12 +137,12 @@ export const defaultVisualControls = {
     shaderLocalFiles: [
       "src/shaders/flow-post.wgsl",
       "src/shaders/aurora-post.wgsl",
-      "src/shaders/living-glass.wgsl",
+      "src/shaders/refractive-nebula.wgsl",
     ],
   },
   sky: {
     auroraPointerHome: [0.42, 0],
-    livingGlass: {
+    refractiveNebula: {
       defaultOptions: {
         quality: "medium",
         intensity: 1,
@@ -238,7 +238,7 @@ export const defaultVisualControls = {
       aurora: 2,
       topography: 2.5,
       flowSheet: 2.5,
-      livingGlass: 2,
+      refractiveNebula: 2,
     },
     sampleCount: {
       topography: 4,

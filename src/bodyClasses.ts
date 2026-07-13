@@ -1,12 +1,10 @@
 const pageBodyClasses = [
-  "flow-page-body",
-  "flow-page-body--light",
   "flow-sheet-page-body",
   "hero-flow-page-body",
   "hero-flow-page-body--light",
   "aurora-page-body",
   "topography-page-body",
-  "living-glass-page-body",
+  "refractive-nebula-page-body",
 ];
 
 export function setPageBodyClass(activeClass: string): void {

@@ -1,18 +1,18 @@
 import { defaultVisualControls } from "./visualControls";
-import livingGlassShaderSource from "./shaders/living-glass.wgsl?raw";
+import refractiveNebulaShaderSource from "./shaders/refractive-nebula.wgsl?raw";
 
-const LIVING_GLASS_CONTROLS = defaultVisualControls.sky.livingGlass;
-const QUALITY_SETTINGS = LIVING_GLASS_CONTROLS.qualitySettings;
+const REFRACTIVE_NEBULA_CONTROLS = defaultVisualControls.sky.refractiveNebula;
+const QUALITY_SETTINGS = REFRACTIVE_NEBULA_CONTROLS.qualitySettings;
 
-export type LivingGlassQuality = keyof typeof QUALITY_SETTINGS;
-type ShaderQuality = (typeof QUALITY_SETTINGS)[LivingGlassQuality]["shaderQuality"];
+export type RefractiveNebulaQuality = keyof typeof QUALITY_SETTINGS;
+type ShaderQuality = (typeof QUALITY_SETTINGS)[RefractiveNebulaQuality]["shaderQuality"];
 
-export const DEFAULT_LIVING_GLASS_QUALITY: LivingGlassQuality =
-  LIVING_GLASS_CONTROLS.defaultOptions.quality;
+export const DEFAULT_REFRACTIVE_NEBULA_QUALITY: RefractiveNebulaQuality =
+  REFRACTIVE_NEBULA_CONTROLS.defaultOptions.quality;
 
-export const LIVING_GLASS_QUALITY_LEVELS = Object.entries(QUALITY_SETTINGS).map(
+export const REFRACTIVE_NEBULA_QUALITY_LEVELS = Object.entries(QUALITY_SETTINGS).map(
   ([id, settings]) => ({
-    id: id as LivingGlassQuality,
+    id: id as RefractiveNebulaQuality,
     label: settings.label,
     resolutionScale: settings.resolutionScale,
     rayMarchSteps: settings.rayMarchSteps,
@@ -21,31 +21,33 @@ export const LIVING_GLASS_QUALITY_LEVELS = Object.entries(QUALITY_SETTINGS).map(
   }),
 );
 
-export interface LivingGlassRenderer {
+export interface RefractiveNebulaRenderer {
   destroy: () => void;
-  setQuality: (quality: LivingGlassQuality) => void;
+  setQuality: (quality: RefractiveNebulaQuality) => void;
 }
 
-interface LivingGlassOptions {
-  quality: LivingGlassQuality;
+interface RefractiveNebulaOptions {
+  quality: RefractiveNebulaQuality;
   intensity: number;
   parallax: number;
   seed: number;
 }
 
-const DEFAULT_OPTIONS: LivingGlassOptions = LIVING_GLASS_CONTROLS.defaultOptions;
+const DEFAULT_OPTIONS: RefractiveNebulaOptions = REFRACTIVE_NEBULA_CONTROLS.defaultOptions;
 
-export function normalizeLivingGlassQuality(value: string): LivingGlassQuality {
-  return value in QUALITY_SETTINGS ? (value as LivingGlassQuality) : DEFAULT_LIVING_GLASS_QUALITY;
+export function normalizeRefractiveNebulaQuality(value: string): RefractiveNebulaQuality {
+  return value in QUALITY_SETTINGS
+    ? (value as RefractiveNebulaQuality)
+    : DEFAULT_REFRACTIVE_NEBULA_QUALITY;
 }
 
-export async function startLivingGlassRenderer(
+export async function startRefractiveNebulaRenderer(
   canvas: HTMLCanvasElement,
-  options: Partial<LivingGlassOptions> = {},
-): Promise<LivingGlassRenderer> {
+  options: Partial<RefractiveNebulaOptions> = {},
+): Promise<RefractiveNebulaRenderer> {
   if (!navigator.gpu) {
     throw new Error(
-      "This browser does not expose navigator.gpu. The living glass study needs a WebGPU-capable browser.",
+      "This browser does not expose navigator.gpu. The refractive nebula study needs a WebGPU-capable browser.",
     );
   }
 
@@ -66,18 +68,18 @@ export async function startLivingGlassRenderer(
 
   const gpuContext = context;
   const format = navigator.gpu.getPreferredCanvasFormat();
-  const opts: LivingGlassOptions = { ...DEFAULT_OPTIONS, ...options };
+  const opts: RefractiveNebulaOptions = { ...DEFAULT_OPTIONS, ...options };
   const uniformBuffer = device.createBuffer({
-    label: "living glass uniforms",
+    label: "refractive nebula uniforms",
     size: 16 * Float32Array.BYTES_PER_ELEMENT,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
   const shaderModule = device.createShaderModule({
-    label: "living glass shader",
-    code: livingGlassShaderSource,
+    label: "refractive nebula shader",
+    code: refractiveNebulaShaderSource,
   });
   const bindGroupLayout = device.createBindGroupLayout({
-    label: "living glass bind group layout",
+    label: "refractive nebula bind group layout",
     entries: [
       {
         binding: 0,
@@ -89,11 +91,11 @@ export async function startLivingGlassRenderer(
     ],
   });
   const pipelineLayout = device.createPipelineLayout({
-    label: "living glass pipeline layout",
+    label: "refractive nebula pipeline layout",
     bindGroupLayouts: [bindGroupLayout],
   });
   const bindGroup = device.createBindGroup({
-    label: "living glass bind group",
+    label: "refractive nebula bind group",
     layout: bindGroupLayout,
     entries: [
       {
@@ -104,10 +106,10 @@ export async function startLivingGlassRenderer(
       },
     ],
   });
-  const pipelines = new Map<LivingGlassQuality, GPURenderPipeline>();
+  const pipelines = new Map<RefractiveNebulaQuality, GPURenderPipeline>();
 
   device.pushErrorScope("validation");
-  for (const { id } of LIVING_GLASS_QUALITY_LEVELS) {
+  for (const { id } of REFRACTIVE_NEBULA_QUALITY_LEVELS) {
     pipelines.set(
       id,
       createPipeline(
@@ -123,7 +125,7 @@ export async function startLivingGlassRenderer(
 
   if (setupError) {
     uniformBuffer.destroy();
-    throw new Error(`Living glass WebGPU setup failed: ${setupError.message}`);
+    throw new Error(`Refractive nebula WebGPU setup failed: ${setupError.message}`);
   }
 
   const uniforms = new Float32Array(16);
@@ -163,7 +165,7 @@ export async function startLivingGlassRenderer(
   function resizeCanvas(): boolean {
     const pixelRatio = Math.min(
       window.devicePixelRatio || 1,
-      defaultVisualControls.performance.maxPixelRatio.livingGlass,
+      defaultVisualControls.performance.maxPixelRatio.refractiveNebula,
     );
     const scale = QUALITY_SETTINGS[quality].resolutionScale;
     const width = Math.max(1, Math.floor(canvas.clientWidth * pixelRatio * scale));
@@ -202,11 +204,11 @@ export async function startLivingGlassRenderer(
     const pipeline = pipelines.get(quality);
 
     if (!pipeline) {
-      throw new Error(`Missing living glass pipeline for quality "${quality}".`);
+      throw new Error(`Missing refractive nebula pipeline for quality "${quality}".`);
     }
 
     const encoder = device.createCommandEncoder({
-      label: "living glass frame encoder",
+      label: "refractive nebula frame encoder",
     });
 
     if (!checkedFirstFrame) {
@@ -214,7 +216,7 @@ export async function startLivingGlassRenderer(
     }
 
     const pass = encoder.beginRenderPass({
-      label: "living glass render pass",
+      label: "refractive nebula render pass",
       colorAttachments: [
         {
           view: gpuContext.getCurrentTexture().createView(),
@@ -235,7 +237,7 @@ export async function startLivingGlassRenderer(
       checkedFirstFrame = true;
       void device.popErrorScope().then((frameError) => {
         if (frameError) {
-          console.error(`Living glass WebGPU frame failed: ${frameError.message}`);
+          console.error(`Refractive nebula WebGPU frame failed: ${frameError.message}`);
         }
       });
     }
@@ -272,7 +274,7 @@ export async function startLivingGlassRenderer(
       pipelines.clear();
       uniformBuffer.destroy();
     },
-    setQuality: (nextQuality: LivingGlassQuality) => {
+    setQuality: (nextQuality: RefractiveNebulaQuality) => {
       if (!active || nextQuality === quality) {
         return;
       }
@@ -294,7 +296,7 @@ function createPipeline(
   shaderQuality: ShaderQuality,
 ): GPURenderPipeline {
   return device.createRenderPipeline({
-    label: `living glass pipeline q${shaderQuality}`,
+    label: `refractive nebula pipeline q${shaderQuality}`,
     layout,
     vertex: {
       module,
