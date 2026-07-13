@@ -17,7 +17,7 @@ export function mountAuroraPage(root: HTMLDivElement): PageHandle {
       "One luminous primary flow, a distant supporting curtain, and sparse atmosphere composed around deliberate negative space.",
     actions: [
       { href: "/hero-flow", label: "Open hero flow", variant: "primary" },
-      { href: "/flow-sheet", label: "View flow sheet", variant: "secondary" },
+      { href: "/topography", label: "View topography", variant: "secondary" },
     ],
   });
 

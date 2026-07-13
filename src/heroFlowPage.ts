@@ -20,7 +20,7 @@ export function mountHeroFlowPage(root: HTMLDivElement): PageHandle {
       "A luminous field of routed particles, drifting curtains, and reactive wake lines moving through soft attractors.",
     actions: [
       { href: "/hero-flow-dark", label: "Open dark hero", variant: "primary" },
-      { href: "/flow-sheet", label: "View flow sheet", variant: "secondary" },
+      { href: "/aurora", label: "View aurora", variant: "secondary" },
     ],
   });
 

@@ -120,36 +120,22 @@ export interface VisualControls {
       idleDecay: number;
       reducedMotionIdleDecay: number;
     };
-    flowSheet: {
-      lerpRate: number;
-      idleDecay: number;
-      reducedMotionScale: number;
-      grabResponse: number;
-      grabRelease: number;
-    };
   };
   performance: {
     maxPixelRatio: {
       flow: number;
       aurora: number;
       topography: number;
-      flowSheet: number;
       refractiveNebula: number;
     };
     sampleCount: {
       topography: number;
-      flowSheet: number;
     };
   };
   geometry: {
     topography: {
       segments: number;
       shapes: readonly TopographyShapeControl[];
-    };
-    flowSheet: {
-      layerCount: number;
-      rowsPerLayer: number;
-      pointCount: number;
     };
   };
 }
@@ -302,25 +288,16 @@ export const defaultVisualControls = {
       idleDecay: 0.97,
       reducedMotionIdleDecay: 0.92,
     },
-    flowSheet: {
-      lerpRate: 0.1,
-      idleDecay: 0.96,
-      reducedMotionScale: 0.28,
-      grabResponse: 0.18,
-      grabRelease: 0.012,
-    },
   },
   performance: {
     maxPixelRatio: {
       flow: 2,
       aurora: 2,
       topography: 2.5,
-      flowSheet: 2.5,
       refractiveNebula: 2,
     },
     sampleCount: {
       topography: 4,
-      flowSheet: 4,
     },
   },
   geometry: {
@@ -408,11 +385,6 @@ export const defaultVisualControls = {
           focus: 0.82,
         },
       ],
-    },
-    flowSheet: {
-      layerCount: 1,
-      rowsPerLayer: 104,
-      pointCount: 640,
     },
   },
 } as const satisfies VisualControls;

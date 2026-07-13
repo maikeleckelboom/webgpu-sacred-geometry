@@ -1,6 +1,5 @@
 import "./style.css";
 import { mountAuroraPage } from "./auroraPage";
-import { mountFlowSheetPage } from "./flowSheetPage";
 import { mountHeroFlowDarkPage } from "./heroFlowDarkPage";
 import { mountHeroFlowPage } from "./heroFlowPage";
 import { createLabHeader, setLabHeaderActive, type LabRoute } from "./navigation";
@@ -27,7 +26,6 @@ const routeRedirects: Readonly<Record<string, string>> = {
 
 const pageRoutes: Record<string, PageRoute> = {
   "/": { mount: mountHeroFlowPage, route: "hero-flow" },
-  "/flow-sheet": { mount: mountFlowSheetPage, route: "flow-sheet" },
   "/hero-flow-dark": { mount: mountHeroFlowDarkPage, route: "hero-flow-dark" },
   "/hero-flow": { mount: mountHeroFlowPage, route: "hero-flow" },
   "/aurora": { mount: mountAuroraPage, route: "aurora" },

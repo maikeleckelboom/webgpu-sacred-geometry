@@ -1,5 +1,4 @@
 const pageBodyClasses = [
-  "flow-sheet-page-body",
   "hero-flow-page-body",
   "hero-flow-page-body--light",
   "hero-flow-dark-page-body",
