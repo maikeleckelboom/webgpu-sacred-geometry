@@ -17,12 +17,16 @@ export function mountHeroFlowDarkPage(root: HTMLDivElement): PageHandle {
     canvasLabel: "WebGPU particle flow field behind a dark hero example",
     titleId: "hero-flow-dark-title",
     kicker: "WebGPU study 02 / dark hero",
-    title: "Particle flow field under northern light.",
+    title: "productsoftware van interface tot systeem.",
     description:
-      "A luminous field of routed particles, drifting curtains, and reactive wake lines moving through soft attractors.",
+      "Full-stack developer met een sterke frontendbasis. Ik werk aan interfaces, applicatielogica en de technische samenhang ertussen.",
     actions: [
-      { href: "/hero-flow", label: "Open light hero", variant: "primary" },
-      { href: "/topography", label: "Open topography", variant: "secondary" },
+      { href: "https://maikel.site/werk", label: "Bekijk mijn werk", variant: "primary" },
+      {
+        href: "https://maikel.site/loopbaan",
+        label: "Bekijk mijn loopbaan",
+        variant: "secondary",
+      },
     ],
   });
 
