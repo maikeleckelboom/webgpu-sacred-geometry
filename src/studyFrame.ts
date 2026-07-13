@@ -12,7 +12,7 @@ export interface StudyFrameOptions {
   canvasClassName: string;
   canvasLabel: string;
   titleId: string;
-  kicker: string;
+  kicker?: string;
   title: string;
   description: string;
   actions: StudyAction[];
@@ -35,6 +35,10 @@ export function mountStudyFrame(
   root: HTMLDivElement,
   options: StudyFrameOptions,
 ): StudyFrameElements {
+  const kickerMarkup = options.kicker
+    ? `<p class="study-kicker">${escapeHtml(options.kicker)}</p>`
+    : "";
+
   root.innerHTML = `
     <div class="study-page ${options.pageClassName}" data-route="${options.route}">
       <div class="study-canvas-layer" aria-hidden="true">
@@ -42,7 +46,7 @@ export function mountStudyFrame(
       </div>
 
       <main class="study-hero" aria-labelledby="${options.titleId}">
-        <p class="study-kicker">${escapeHtml(options.kicker)}</p>
+        ${kickerMarkup}
         <h1 id="${options.titleId}">${escapeHtml(options.title)}</h1>
         <p class="study-subtitle">${escapeHtml(options.description)}</p>
         <div class="study-actions" aria-label="Primary actions">

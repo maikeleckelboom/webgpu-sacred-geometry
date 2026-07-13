@@ -16,7 +16,6 @@ export function mountHeroFlowDarkPage(root: HTMLDivElement): PageHandle {
     canvasClassName: "hero-flow-canvas",
     canvasLabel: "WebGPU particle flow field behind a dark hero example",
     titleId: "hero-flow-dark-title",
-    kicker: "WebGPU study 02 / dark hero",
     title: "productsoftware van interface tot systeem.",
     description:
       "Full-stack developer met een sterke frontendbasis. Ik werk aan interfaces, applicatielogica en de technische samenhang ertussen.",
